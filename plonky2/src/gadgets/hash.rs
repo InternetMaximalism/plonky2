@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::field::extension::Extendable;
 use crate::hash::hash_types::{HashOutTarget, RichField};
 use crate::hash::hashing::SPONGE_WIDTH;
