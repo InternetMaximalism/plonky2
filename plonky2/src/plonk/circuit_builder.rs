@@ -53,6 +53,10 @@ use crate::util::{log2_ceil, log2_strict, transpose, transpose_poly_values};
 pub struct CircuitBuilder<F: RichField + Extendable<D>, const D: usize> {
     pub config: CircuitConfig,
 
+    pub debug_wire_index: Option<usize>,
+    pub debug_gate_row: Option<usize>,
+    pub debug_slot_index: Option<usize>,
+
     /// A domain separator, which is included in the initial Fiat-Shamir seed. This is generally not
     /// needed, but can be used to ensure that proofs for one application are not valid for another.
     /// Defaults to the empty vector.
@@ -107,6 +111,9 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     pub fn new(config: CircuitConfig) -> Self {
         let builder = CircuitBuilder {
             config,
+            debug_wire_index: None,
+            debug_gate_row: None,
+            debug_slot_index: None,
             domain_separator: None,
             gates: HashSet::new(),
             gate_instances: Vec::new(),
@@ -180,6 +187,11 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     /// generate the final witness (a grid of wire values), these virtual targets will go away.
     pub fn add_virtual_target(&mut self) -> Target {
         let index = self.virtual_target_index;
+
+        if Some(index) == self.debug_wire_index {
+            panic!("found index {index}");
+        }
+
         self.virtual_target_index += 1;
         Target::VirtualTarget { index }
     }
@@ -278,6 +290,9 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         constants.resize(gate_type.num_constants(), F::ZERO);
 
         let row = self.gate_instances.len();
+        if Some(row) == self.debug_gate_row {
+            panic!("found row {row}");
+        }
 
         self.constant_generators
             .extend(gate_type.extra_constant_wires().into_iter().map(
@@ -503,6 +518,13 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             (num_gates, 0)
         };
         let current_slot = &mut self.current_slots.get_mut(&gate_ref).unwrap().current_slot;
+
+        if Some(gate_idx) == self.debug_gate_row
+            && (Some(slot_idx) == self.debug_slot_index || self.debug_slot_index.is_none())
+        {
+            panic!("found row {gate_idx} and slot_idx: {slot_idx}");
+        }
+
         if slot_idx == num_ops - 1 {
             // We've filled up the slots at this index.
             current_slot.remove(params);
