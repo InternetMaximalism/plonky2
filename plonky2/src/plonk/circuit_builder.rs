@@ -290,8 +290,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         constants.resize(gate_type.num_constants(), F::ZERO);
 
         let row = self.gate_instances.len();
-        if Some(row) == self.debug_gate_row {
-            panic!("found row {row}");
+        if Some(row) == self.debug_gate_row && self.debug_slot_index.is_none() {
+            panic!("found row {row}, gate ID: {:?}", gate_type.id());
         }
 
         self.constant_generators
@@ -519,9 +519,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         };
         let current_slot = &mut self.current_slots.get_mut(&gate_ref).unwrap().current_slot;
 
-        if Some(gate_idx) == self.debug_gate_row
-            && (Some(slot_idx) == self.debug_slot_index || self.debug_slot_index.is_none())
-        {
+        if Some(gate_idx) == self.debug_gate_row && Some(slot_idx) == self.debug_slot_index {
             panic!("found row {gate_idx} and slot_idx: {slot_idx}");
         }
 
