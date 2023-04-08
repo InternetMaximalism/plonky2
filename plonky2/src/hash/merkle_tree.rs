@@ -140,27 +140,55 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
             log2_leaves_len
         );
 
-        let num_digests = 2 * (leaves.len() - (1 << cap_height));
-        let mut digests = Vec::with_capacity(num_digests);
+        #[cfg(feature = "gpu")]
+        {
+            use crate::hash::merkle_tree_cuda;
 
-        let len_cap = 1 << cap_height;
-        let mut cap = Vec::with_capacity(len_cap);
-
-        let digests_buf = capacity_up_to_mut(&mut digests, num_digests);
-        let cap_buf = capacity_up_to_mut(&mut cap, len_cap);
-        fill_digests_buf::<F, H>(digests_buf, cap_buf, &leaves[..], cap_height);
-
-        unsafe {
-            // SAFETY: `fill_digests_buf` and `cap` initialized the spare capacity up to
-            // `num_digests` and `len_cap`, resp.
-            digests.set_len(num_digests);
-            cap.set_len(len_cap);
+            // TODO: Cuda code is implemented in the case where
+            // F == GoldilocksField and H == PoseidonHash.
+            // This filter is not perfect.
+            let gpu_condition = (leaves.len() > (1 << cap_height))
+                    && (F::ORDER == 0xFFFFFFFF00000001) // GoldilocksField
+                    && (H::HASH_SIZE == 32); // PoseidonHash
+            assert!(
+                gpu_condition,
+                "F is not GoldilocksField or H is not PoseidonHash",
+            );
+            let cloned_leaves = leaves.clone();
+            let (digests, cap) = merkle_tree_cuda::construct_tree::<F, <H as Hasher<F>>::Hash>(
+                cloned_leaves,
+                cap_height,
+            );
+            return Self {
+                leaves,
+                digests,
+                cap: MerkleCap(cap),
+            };
         }
+        #[cfg(not(feature = "gpu"))]
+        {
+            let num_digests = 2 * (leaves.len() - (1 << cap_height));
+            let mut digests = Vec::with_capacity(num_digests);
 
-        Self {
-            leaves,
-            digests,
-            cap: MerkleCap(cap),
+            let len_cap = 1 << cap_height;
+            let mut cap = Vec::with_capacity(len_cap);
+
+            let digests_buf = capacity_up_to_mut(&mut digests, num_digests);
+            let cap_buf = capacity_up_to_mut(&mut cap, len_cap);
+            fill_digests_buf::<F, H>(digests_buf, cap_buf, &leaves[..], cap_height);
+
+            unsafe {
+                // SAFETY: `fill_digests_buf` and `cap` initialized the spare capacity up to
+                // `num_digests` and `len_cap`, resp.
+                digests.set_len(num_digests);
+                cap.set_len(len_cap);
+            }
+
+            return Self {
+                leaves,
+                digests,
+                cap: MerkleCap(cap),
+            };
         }
     }
 

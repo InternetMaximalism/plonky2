@@ -1,0 +1,3 @@
+[submodule "plonky2/merkletree-poseidon-cuda"]
+	path = plonky2/merkletree-poseidon-cuda
+	url = https://github.com/6iKezbAD3CZnf/merkletree-poseidon-cuda.git

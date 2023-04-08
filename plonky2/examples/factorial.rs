@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use anyhow::Result;
 use plonky2::field::types::Field;
 use plonky2::iop::witness::{PartialWitness, WitnessWrite};
@@ -19,7 +21,7 @@ fn main() -> Result<()> {
     // The arithmetic circuit.
     let initial = builder.add_virtual_target();
     let mut cur_target = initial;
-    for i in 2..101 {
+    for i in 2..100 {
         let i_target = builder.constant(F::from_canonical_u32(i));
         cur_target = builder.mul(cur_target, i_target);
     }
@@ -28,11 +30,20 @@ fn main() -> Result<()> {
     builder.register_public_input(initial);
     builder.register_public_input(cur_target);
 
+    dbg!(&builder.config);
+
     let mut pw = PartialWitness::new();
     pw.set_target(initial, F::ONE);
 
     let data = builder.build::<C>();
+    let start0 = Instant::now();
     let proof = data.prove(pw)?;
+    let end0 = start0.elapsed();
+    println!(
+        "Prove! = {}.{:03} sec",
+        end0.as_secs(),
+        end0.subsec_millis()
+    );
 
     println!(
         "Factorial starting at {} is {}",
