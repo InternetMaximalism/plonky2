@@ -21,8 +21,8 @@ use crate::gadgets::biguint::{
 
 #[derive(Clone, Debug)]
 pub struct NonNativeTarget<FF: Field> {
-    pub(crate) value: BigUintTarget,
-    pub(crate) _phantom: PhantomData<FF>,
+    pub value: BigUintTarget,
+    pub _phantom: PhantomData<FF>,
 }
 
 pub trait CircuitBuilderNonNative<F: RichField + Extendable<D>, const D: usize> {

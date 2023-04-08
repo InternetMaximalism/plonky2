@@ -63,6 +63,7 @@ impl<F: Extendable<2>> Field for QuadraticExtension<F> {
     const ONE: Self = Self([F::ONE, F::ZERO]);
     const TWO: Self = Self([F::TWO, F::ZERO]);
     const NEG_ONE: Self = Self([F::NEG_ONE, F::ZERO]);
+    const MONTGOMERY_INV: Self = todo!();
 
     // `p^2 - 1 = (p - 1)(p + 1)`. The `p - 1` term has a two-adicity of `F::TWO_ADICITY`. As
     // long as `F::TWO_ADICITY >= 2`, `p` can be written as `4n + 1`, so `p + 1` can be written as
@@ -70,6 +71,7 @@ impl<F: Extendable<2>> Field for QuadraticExtension<F> {
     const TWO_ADICITY: usize = F::TWO_ADICITY + 1;
     const CHARACTERISTIC_TWO_ADICITY: usize = F::CHARACTERISTIC_TWO_ADICITY;
 
+    const NONRESIDUE: Self = Self(F::EXT_NONRESIDUE);
     const MULTIPLICATIVE_GROUP_GENERATOR: Self = Self(F::EXT_MULTIPLICATIVE_GROUP_GENERATOR);
     const POWER_OF_TWO_GENERATOR: Self = Self(F::EXT_POWER_OF_TWO_GENERATOR);
 
@@ -80,6 +82,10 @@ impl<F: Extendable<2>> Field for QuadraticExtension<F> {
     }
     fn characteristic() -> BigUint {
         F::characteristic()
+    }
+
+    fn mul_by_nonresidue(&self) -> Self {
+        todo!()
     }
 
     // Algorithm 11.3.4 in Handbook of Elliptic and Hyperelliptic Curve Cryptography.

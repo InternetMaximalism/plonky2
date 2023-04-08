@@ -18,6 +18,9 @@ pub trait Curve: 'static + Sync + Sized + Copy + Debug {
 
     const A: Self::BaseField;
     const B: Self::BaseField;
+    const INV_TWO: Self::BaseField;
+    const TWIST_MUL_BY_Q_X: Self::BaseField;
+    const TWIST_MUL_BY_Q_Y: Self::BaseField;
 
     const GENERATOR_AFFINE: AffinePoint<Self>;
 

@@ -70,6 +70,7 @@ impl<F: Extendable<5>> Field for QuinticExtension<F> {
     const ONE: Self = Self([F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO]);
     const TWO: Self = Self([F::TWO, F::ZERO, F::ZERO, F::ZERO, F::ZERO]);
     const NEG_ONE: Self = Self([F::NEG_ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO]);
+    const MONTGOMERY_INV: Self = todo!();
 
     // `p^5 - 1 = (p - 1)(p^4 + p^3 + p^2 + p + 1)`. The `p - 1` term
     // has a two-adicity of `F::TWO_ADICITY` and the term `p^4 + p^3 +
@@ -79,6 +80,7 @@ impl<F: Extendable<5>> Field for QuinticExtension<F> {
     const TWO_ADICITY: usize = F::TWO_ADICITY;
     const CHARACTERISTIC_TWO_ADICITY: usize = F::CHARACTERISTIC_TWO_ADICITY;
 
+    const NONRESIDUE: Self = Self(F::EXT_NONRESIDUE);
     const MULTIPLICATIVE_GROUP_GENERATOR: Self = Self(F::EXT_MULTIPLICATIVE_GROUP_GENERATOR);
     const POWER_OF_TWO_GENERATOR: Self = Self(F::EXT_POWER_OF_TWO_GENERATOR);
 
@@ -89,6 +91,10 @@ impl<F: Extendable<5>> Field for QuinticExtension<F> {
     }
     fn characteristic() -> BigUint {
         F::characteristic()
+    }
+
+    fn mul_by_nonresidue(&self) -> Self {
+        todo!()
     }
 
     // Algorithm 11.3.4 in Handbook of Elliptic and Hyperelliptic Curve Cryptography.
