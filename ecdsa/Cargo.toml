@@ -11,7 +11,7 @@ anyhow = { version = "1.0.40", default-features = false }
 itertools = { version = "0.10.0", default-features = false }
 maybe_rayon = { path = "../maybe_rayon", default-features = false }
 num = { version = "0.4.0", default-features = false }
-plonky2 = { path = "../plonky2", default-features = false }
+plonky2 = { path = "../plonky2", default-features = false, features = ["std"] }
 plonky2_u32 = { path = "../u32", default-features = false }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 

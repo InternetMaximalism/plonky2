@@ -90,6 +90,13 @@ impl CircuitConfig {
         }
     }
 
+    pub fn pairing_config() -> Self {
+        Self {
+            num_wires: 338,
+            ..Self::standard_recursion_config()
+        }
+    }
+
     pub fn wide_ecc_config() -> Self {
         Self {
             num_wires: 234,

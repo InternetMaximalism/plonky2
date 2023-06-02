@@ -69,6 +69,9 @@ pub trait Extendable<const D: usize>: Field + Sized {
     const DTH_ROOT: Self;
 
     const EXT_NONRESIDUE: [Self; D];
+    const FROBENIUS_COEFFS_EXT6_C1: [Self; 6];
+    const FROBENIUS_COEFFS_EXT6_C2: [Self; 6];
+    const FROBENIUS_COEFFS_EXT12_C1: [Self; 6];
 
     /// Chosen so that when raised to the power `(p^D - 1) >> F::Extension::TWO_ADICITY)`
     /// we obtain F::EXT_POWER_OF_TWO_GENERATOR.
@@ -85,6 +88,9 @@ impl<F: Field + Frobenius<1> + FieldExtension<1, BaseField = F>> Extendable<1> f
     const W: Self = F::ONE;
     const DTH_ROOT: Self = F::ONE;
     const EXT_NONRESIDUE: [Self; 1] = [F::NONRESIDUE];
+    const FROBENIUS_COEFFS_EXT6_C1: [Self; 6] = todo!();
+    const FROBENIUS_COEFFS_EXT6_C2: [Self; 6] = todo!();
+    const FROBENIUS_COEFFS_EXT12_C1: [Self; 6] = todo!();
     const EXT_MULTIPLICATIVE_GROUP_GENERATOR: [Self; 1] = [F::MULTIPLICATIVE_GROUP_GENERATOR];
     const EXT_POWER_OF_TWO_GENERATOR: [Self; 1] = [F::POWER_OF_TWO_GENERATOR];
 }
