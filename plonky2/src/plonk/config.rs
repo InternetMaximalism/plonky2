@@ -8,7 +8,7 @@ use serde::Serialize;
 use crate::field::extension::quadratic::QuadraticExtension;
 use crate::field::extension::{Extendable, FieldExtension};
 use crate::field::goldilocks_field::GoldilocksField;
-use crate::hash::hash_types::{HashOut, RichField};
+use crate::hash::hash_types::{HashOut, RichField, HashOutTarget};
 use crate::hash::hashing::PlonkyPermutation;
 use crate::hash::keccak::KeccakHash;
 use crate::hash::poseidon::PoseidonHash;

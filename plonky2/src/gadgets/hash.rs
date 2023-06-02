@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
 use crate::field::extension::Extendable;
-use crate::hash::hash_types::RichField;
-use crate::iop::target::BoolTarget;
+use crate::hash::hash_types::{RichField, HashOutTarget};
+use crate::iop::target::{BoolTarget, Target};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::config::AlgebraicHasher;
 

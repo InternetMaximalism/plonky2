@@ -19,6 +19,8 @@ use crate::iop::target::{BoolTarget, Target};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::config::{AlgebraicHasher, Hasher};
 
+use super::hash_types::HashOutTarget;
+
 pub const SPONGE_RATE: usize = 8;
 pub const SPONGE_CAPACITY: usize = 4;
 pub const SPONGE_WIDTH: usize = SPONGE_RATE + SPONGE_CAPACITY;

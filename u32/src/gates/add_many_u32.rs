@@ -11,7 +11,7 @@ use plonky2::gates::gate::Gate;
 use plonky2::gates::util::StridedConstraintConsumer;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
-use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator};
+use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator, WitnessGeneratorRef};
 use plonky2::iop::target::Target;
 use plonky2::iop::wire::Wire;
 use plonky2::iop::witness::{PartitionWitness, Witness, WitnessWrite};
@@ -89,13 +89,6 @@ impl<F: RichField + Extendable<D>, const D: usize> U32AddManyGate<F, D> {
 impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32AddManyGate<F, D> {
     fn id(&self) -> String {
         format!("{self:?}")
-    }
-
-    fn export_circom_verification_code(&self) -> String {
-        todo!()
-    }
-    fn export_solidity_verification_code(&self) -> String {
-        todo!()
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
@@ -243,17 +236,17 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32AddManyGate
         constraints
     }
 
-    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<Box<dyn WitnessGenerator<F>>> {
+    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<WitnessGeneratorRef<F>> {
         (0..self.num_ops)
             .map(|i| {
-                let g: Box<dyn WitnessGenerator<F>> = Box::new(
+                let g: WitnessGeneratorRef<F> = WitnessGeneratorRef(Box::new(
                     U32AddManyGenerator {
                         gate: *self,
                         row,
                         i,
                         _phantom: PhantomData,
                     }
-                    .adapter(),
+                    .adapter()),
                 );
                 g
             })
@@ -274,6 +267,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32AddManyGate
 
     fn num_constraints(&self) -> usize {
         self.num_ops * (3 + Self::num_limbs())
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+        todo!()
+    }
+
+    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    where
+        Self: Sized {
+        todo!()
     }
 }
 
@@ -346,6 +349,20 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
             let wire = local_wire(self.gate.wire_ith_output_jth_limb(self.i, j));
             out_buffer.set_wire(wire, limb);
         }
+    }
+
+    fn id(&self) -> String {
+        format!("{self:?}")
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+        todo!()
+    }
+
+    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    where
+        Self: Sized {
+        todo!()
     }
 }
 

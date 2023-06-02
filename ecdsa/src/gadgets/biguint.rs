@@ -342,6 +342,20 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
         out_buffer.set_biguint_target(&self.div, &div);
         out_buffer.set_biguint_target(&self.rem, &rem);
     }
+
+    fn id(&self) -> alloc::string::String {
+        todo!()
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+        todo!()
+    }
+
+    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    where
+        Self: Sized {
+        todo!()
+    }
 }
 
 #[cfg(test)]

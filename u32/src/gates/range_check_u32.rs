@@ -10,7 +10,7 @@ use plonky2::gates::gate::Gate;
 use plonky2::gates::util::StridedConstraintConsumer;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
-use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator};
+use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator, WitnessGeneratorRef};
 use plonky2::iop::target::Target;
 use plonky2::iop::witness::{PartitionWitness, Witness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
@@ -50,16 +50,19 @@ impl<F: RichField + Extendable<D>, const D: usize> U32RangeCheckGate<F, D> {
     }
 }
 
+impl<F: RichField + Extendable<D>, const D: usize> U32RangeCheckGate<F, D> {
+    pub fn export_circom_verification_code(&self) -> String {
+        todo!()
+    }
+
+    pub fn export_solidity_verification_code(&self) -> String {
+        todo!()
+    }
+}
+
 impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32RangeCheckGate<F, D> {
     fn id(&self) -> String {
         format!("{self:?}")
-    }
-
-    fn export_circom_verification_code(&self) -> String {
-        todo!()
-    }
-    fn export_solidity_verification_code(&self) -> String {
-        todo!()
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
@@ -145,9 +148,9 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32RangeCheckG
         constraints
     }
 
-    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<Box<dyn WitnessGenerator<F>>> {
+    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<WitnessGeneratorRef<F>> {
         let gen = U32RangeCheckGenerator { gate: *self, row };
-        vec![Box::new(gen.adapter())]
+        vec![WitnessGeneratorRef(Box::new(gen.adapter()))]
     }
 
     fn num_wires(&self) -> usize {
@@ -166,6 +169,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32RangeCheckG
     // 1 for checking the each sum of aux limbs, plus a range check for each aux limb.
     fn num_constraints(&self) -> usize {
         self.num_input_limbs * (1 + self.aux_limbs_per_input_limb())
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+        todo!()
+    }
+
+    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    where
+        Self: Sized {
+        todo!()
     }
 }
 
@@ -207,6 +220,20 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
                 out_buffer.set_target(b, b_value);
             }
         }
+    }
+
+    fn id(&self) -> String {
+        format!("{self:?}")
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+        todo!()
+    }
+
+    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    where
+        Self: Sized {
+        todo!()
     }
 }
 

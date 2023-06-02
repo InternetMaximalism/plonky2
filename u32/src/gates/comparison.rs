@@ -12,7 +12,7 @@ use plonky2::gates::packed_util::PackedEvaluableBase;
 use plonky2::gates::util::StridedConstraintConsumer;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
-use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator};
+use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator, WitnessGeneratorRef};
 use plonky2::iop::target::Target;
 use plonky2::iop::wire::Wire;
 use plonky2::iop::witness::{PartitionWitness, Witness, WitnessWrite};
@@ -93,16 +93,19 @@ impl<F: RichField + Extendable<D>, const D: usize> ComparisonGate<F, D> {
     }
 }
 
+impl<F: RichField + Extendable<D>, const D: usize> ComparisonGate<F, D> {
+    pub fn export_circom_verification_code(&self) -> String {
+        todo!()
+    }
+
+    pub fn export_solidity_verification_code(&self) -> String {
+        todo!()
+    }
+}
+
 impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ComparisonGate<F, D> {
     fn id(&self) -> String {
         format!("{self:?}<D={D}>")
-    }
-
-    fn export_circom_verification_code(&self) -> String {
-        todo!()
-    }
-    fn export_solidity_verification_code(&self) -> String {
-        todo!()
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
@@ -294,12 +297,12 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ComparisonGate
         constraints
     }
 
-    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<Box<dyn WitnessGenerator<F>>> {
+    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<WitnessGeneratorRef<F>> {
         let gen = ComparisonGenerator::<F, D> {
             row,
             gate: self.clone(),
         };
-        vec![Box::new(gen.adapter())]
+        vec![WitnessGeneratorRef(Box::new(gen.adapter()))]
     }
 
     fn num_wires(&self) -> usize {
@@ -316,6 +319,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ComparisonGate
 
     fn num_constraints(&self) -> usize {
         6 + 5 * self.num_chunks + self.chunk_bits()
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+        todo!()
+    }
+
+    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    where
+        Self: Sized {
+        todo!()
     }
 }
 
@@ -518,6 +531,20 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
                 msd_bits[i],
             );
         }
+    }
+
+    fn id(&self) -> String {
+        format!("{self:?}")
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+        todo!()
+    }
+
+    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    where
+        Self: Sized {
+        todo!()
     }
 }
 
