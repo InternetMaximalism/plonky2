@@ -10,10 +10,8 @@ use crate::fri::proof::{
 };
 use crate::fri::structure::{FriBatchInfoTarget, FriInstanceInfoTarget, FriOpeningsTarget};
 use crate::fri::{FriConfig, FriParams};
+use crate::gates::coset_interpolation::CosetInterpolationGate;
 use crate::gates::gate::Gate;
-use crate::gates::high_degree_interpolation::HighDegreeInterpolationGate;
-use crate::gates::interpolation::InterpolationGate;
-use crate::gates::low_degree_interpolation::LowDegreeInterpolationGate;
 use crate::gates::random_access::RandomAccessGate;
 use crate::hash::hash_types::{MerkleCapTarget, RichField};
 use crate::iop::ext_target::{flatten_target, ExtensionTarget};
@@ -27,7 +25,7 @@ use crate::with_context;
 impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     /// Computes P'(x^arity) from {P(x*g^i)}_(i=0..arity), where g is a `arity`-th root of unity
     /// and P' is the FRI reduced polynomial.
-    fn compute_evaluation<C: GenericConfig<D, F = F>>(
+    fn compute_evaluation(
         &mut self,
         x: Target,
         x_index_within_coset_bits: &[BoolTarget],
@@ -50,41 +48,28 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let coset_start = self.mul(start, x);
 
         // The answer is gotten by interpolating {(x*g^i, P(x*g^i))} and evaluating at beta.
-        // `HighDegreeInterpolationGate` has degree `arity`, so we use the low-degree gate if
-        // the arity is too large.
-        if arity > self.config.max_quotient_degree_factor {
-            self.interpolate_coset::<LowDegreeInterpolationGate<F, D>>(
-                arity_bits,
-                coset_start,
-                &evals,
-                beta,
-            )
-        } else {
-            self.interpolate_coset::<HighDegreeInterpolationGate<F, D>>(
-                arity_bits,
-                coset_start,
-                &evals,
-                beta,
-            )
-        }
+        let interpolation_gate = <CosetInterpolationGate<F, D>>::with_max_degree(
+            arity_bits,
+            self.config.max_quotient_degree_factor,
+        );
+        self.interpolate_coset(interpolation_gate, coset_start, &evals, beta)
     }
 
     /// Make sure we have enough wires and routed wires to do the FRI checks efficiently. This check
     /// isn't required -- without it we'd get errors elsewhere in the stack -- but just gives more
     /// helpful errors.
-    fn check_recursion_config<C: GenericConfig<D, F = F>>(&self, max_fri_arity_bits: usize) {
+    fn check_recursion_config(&self, max_fri_arity_bits: usize) {
         let random_access = RandomAccessGate::<F, D>::new_from_config(
             &self.config,
             max_fri_arity_bits.max(self.config.fri_config.cap_height),
         );
-        let (interpolation_wires, interpolation_routed_wires) =
-            if 1 << max_fri_arity_bits > self.config.max_quotient_degree_factor {
-                let gate = LowDegreeInterpolationGate::<F, D>::new(max_fri_arity_bits);
-                (gate.num_wires(), gate.num_routed_wires())
-            } else {
-                let gate = HighDegreeInterpolationGate::<F, D>::new(max_fri_arity_bits);
-                (gate.num_wires(), gate.num_routed_wires())
-            };
+        let interpolation_gate = CosetInterpolationGate::<F, D>::with_max_degree(
+            max_fri_arity_bits,
+            self.config.max_quotient_degree_factor,
+        );
+
+        let interpolation_wires = interpolation_gate.num_wires();
+        let interpolation_routed_wires = interpolation_gate.num_routed_wires();
 
         let min_wires = random_access.num_wires().max(interpolation_wires);
         let min_routed_wires = random_access
@@ -106,11 +91,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         );
     }
 
-    fn fri_verify_proof_of_work<H: AlgebraicHasher<F>>(
-        &mut self,
-        fri_pow_response: Target,
-        config: &FriConfig,
-    ) {
+    fn fri_verify_proof_of_work(&mut self, fri_pow_response: Target, config: &FriConfig) {
         self.assert_leading_zeros(
             fri_pow_response,
             config.proof_of_work_bits + (64 - F::order().bits()) as u32,
@@ -129,7 +110,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         C::Hasher: AlgebraicHasher<F>,
     {
         if let Some(max_arity_bits) = params.max_arity_bits() {
-            self.check_recursion_config::<C>(max_arity_bits);
+            self.check_recursion_config(max_arity_bits);
         }
 
         debug_assert_eq!(
@@ -144,7 +125,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         with_context!(
             self,
             "check PoW",
-            self.fri_verify_proof_of_work::<C::Hasher>(challenges.fri_pow_response, &params.config)
+            self.fri_verify_proof_of_work(challenges.fri_pow_response, &params.config)
         );
 
         // Check that parameters are coherent.
@@ -221,7 +202,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         }
     }
 
-    fn fri_combine_initial<C: GenericConfig<D, F = F>>(
+    fn fri_combine_initial(
         &mut self,
         instance: &FriInstanceInfoTarget<D>,
         proof: &FriInitialTreeProofTarget,
@@ -262,9 +243,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             sum = self.div_add_extension(numerator, denominator, sum);
         }
 
-        // Multiply the final polynomial by `X`, so that `final_poly` has the maximum degree for
-        // which the LDT will pass. See github.com/mir-protocol/plonky2/pull/436 for details.
-        self.mul_extension(sum, subgroup_x)
+        sum
     }
 
     fn fri_verifier_query_round<C: GenericConfig<D, F = F>>(
@@ -315,7 +294,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let mut old_eval = with_context!(
             self,
             "combine initial oracles",
-            self.fri_combine_initial::<C>(
+            self.fri_combine_initial(
                 instance,
                 &round_proof.initial_trees_proof,
                 challenges.fri_alpha,
@@ -341,7 +320,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             old_eval = with_context!(
                 self,
                 "infer evaluation using interpolation",
-                self.compute_evaluation::<C>(
+                self.compute_evaluation(
                     subgroup_x,
                     x_index_within_coset_bits,
                     arity_bits,

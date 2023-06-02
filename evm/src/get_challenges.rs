@@ -23,7 +23,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> A
         let mut challenger = Challenger::<F, C::Hasher>::new();
 
         for proof in &self.stark_proofs {
-            challenger.observe_cap(&proof.trace_cap);
+            challenger.observe_cap(&proof.proof.trace_cap);
         }
 
         // TODO: Observe public values.
@@ -35,9 +35,9 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> A
         let num_permutation_batch_sizes = all_stark.permutation_batch_sizes();
 
         AllProofChallenges {
-            stark_challenges: std::array::from_fn(|i| {
+            stark_challenges: core::array::from_fn(|i| {
                 challenger.compact();
-                self.stark_proofs[i].get_challenges(
+                self.stark_proofs[i].proof.get_challenges(
                     &mut challenger,
                     num_permutation_zs[i] > 0,
                     num_permutation_batch_sizes[i],
@@ -53,11 +53,11 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> A
         &self,
         all_stark: &AllStark<F, D>,
         config: &StarkConfig,
-    ) -> AllChallengerState<F, D> {
+    ) -> AllChallengerState<F, C::Hasher, D> {
         let mut challenger = Challenger::<F, C::Hasher>::new();
 
         for proof in &self.stark_proofs {
-            challenger.observe_cap(&proof.trace_cap);
+            challenger.observe_cap(&proof.proof.trace_cap);
         }
 
         // TODO: Observe public values.
@@ -70,7 +70,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> A
 
         let mut challenger_states = vec![challenger.compact()];
         for i in 0..NUM_TABLES {
-            self.stark_proofs[i].get_challenges(
+            self.stark_proofs[i].proof.get_challenges(
                 &mut challenger,
                 num_permutation_zs[i] > 0,
                 num_permutation_batch_sizes[i],
@@ -199,7 +199,7 @@ impl<const D: usize> StarkProofTarget<D> {
             permutation_challenge_sets,
             stark_alphas,
             stark_zeta,
-            fri_challenges: challenger.fri_challenges::<C>(
+            fri_challenges: challenger.fri_challenges(
                 builder,
                 commit_phase_merkle_caps,
                 final_poly,

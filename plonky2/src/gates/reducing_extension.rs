@@ -1,5 +1,4 @@
-use alloc::boxed::Box;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::ops::Range;
@@ -9,14 +8,15 @@ use crate::gates::gate::Gate;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
 use crate::iop::ext_target::ExtensionTarget;
-use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator};
+use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGeneratorRef};
 use crate::iop::target::Target;
 use crate::iop::witness::{PartitionWitness, Witness, WitnessWrite};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
+use crate::util::serialization::{Buffer, IoResult, Read, Write};
 
 /// Computes `sum alpha^i c_i` for a vector `c_i` of `num_coeffs` elements of the extension field.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ReducingExtensionGate<const D: usize> {
     pub num_coeffs: usize,
 }
@@ -63,75 +63,17 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ReducingExtens
         format!("{self:?}")
     }
 
-    fn export_circom_verification_code(&self) -> String {
-        let mut template_str = format!(
-            "template ReducingExtension$NUM_COEFFS() {{
-  signal input constants[NUM_OPENINGS_CONSTANTS()][2];
-  signal input wires[NUM_OPENINGS_WIRES()][2];
-  signal input public_input_hash[4];
-  signal input constraints[NUM_GATE_CONSTRAINTS()][2];
-  signal output out[NUM_GATE_CONSTRAINTS()][2];
-
-  signal filter[2];
-  $SET_FILTER;
-
-  var acc_start = 2 * $D;
-  signal m[$NUM_COEFFS][2][2];
-  for (var i = 0; i < $NUM_COEFFS; i++) {{
-    m[i] <== WiresAlgebraMul(acc_start, $D)(wires);
-    for (var j = 0; j < $D; j++) {{
-      out[i * $D + j] <== ConstraintPush()(constraints[i * $D + j], filter, GlExtAdd()(m[i][j], GlExtSub()(wires[(3 + i) * $D + j], wires[re_wires_accs_start(i, $NUM_COEFFS) + j])));
-    }}
-    acc_start = re_wires_accs_start(i, $NUM_COEFFS);
-  }}
-
-  for (var i = $NUM_COEFFS * $D; i < NUM_GATE_CONSTRAINTS(); i++) {{
-    out[i] <== constraints[i];
-  }}
-}}
-function re_wires_accs_start(i, num_coeffs) {{
-  if (i == num_coeffs - 1) return 0;
-  else return (3 + i + num_coeffs) * $D;
-}}"
-        ).to_string();
-
-        template_str = template_str.replace("$NUM_COEFFS", &*self.num_coeffs.to_string());
-        template_str = template_str.replace("$D", &*D.to_string());
-
-        template_str
+    fn serialize(&self, dst: &mut Vec<u8>) -> IoResult<()> {
+        dst.write_usize(self.num_coeffs)?;
+        Ok(())
     }
-    fn export_solidity_verification_code(&self) -> String {
-        let mut template_str = format!(
-            "library ReducingExtension$NUM_COEFFSLib {{
-    using GoldilocksFieldLib for uint64;
-    using GoldilocksExtLib for uint64[2];
 
-    function set_filter(GatesUtilsLib.EvaluationVars memory ev) internal pure {{
-        $SET_FILTER;
-    }}
-
-    function wires_accs_start(uint32 i) internal pure returns(uint32) {{
-        if (i == $NUM_COEFFS - 1) return 0;
-        return (3 + i + $NUM_COEFFS) * $D;
-    }}
-
-    function eval(GatesUtilsLib.EvaluationVars memory ev, uint64[2][$NUM_GATE_CONSTRAINTS] memory constraints) internal pure {{
-        uint32 acc_start = 2 * $D;
-        for (uint32 i = 0; i < $NUM_COEFFS; i++) {{
-            uint64[2][$D] memory m = GatesUtilsLib.wires_algebra_mul(ev.wires, acc_start, $D);
-            for (uint32 j = 0; j < $D; j++) {{
-                GatesUtilsLib.push(constraints, ev.filter, i * $D + j, m[j].add(ev.wires[(3 + i) * $D + j].sub(ev.wires[wires_accs_start(i) + j])));
-            }}
-            acc_start = wires_accs_start(i);
-        }}
-    }}
-}}"
-        )
-            .to_string();
-
-        template_str = template_str.replace("$NUM_COEFFS", &*self.num_coeffs.to_string());
-
-        template_str
+    fn deserialize(src: &mut Buffer) -> IoResult<Self>
+    where
+        Self: Sized,
+    {
+        let num_coeffs = src.read_usize()?;
+        Ok(Self::new(num_coeffs))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
@@ -208,8 +150,8 @@ function re_wires_accs_start(i, num_coeffs) {{
             .collect()
     }
 
-    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<Box<dyn WitnessGenerator<F>>> {
-        vec![Box::new(
+    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<WitnessGeneratorRef<F>> {
+        vec![WitnessGeneratorRef::new(
             ReducingGenerator {
                 row,
                 gate: self.clone(),
@@ -235,13 +177,17 @@ function re_wires_accs_start(i, num_coeffs) {{
     }
 }
 
-#[derive(Debug)]
-struct ReducingGenerator<const D: usize> {
+#[derive(Debug, Default)]
+pub struct ReducingGenerator<const D: usize> {
     row: usize,
     gate: ReducingExtensionGate<D>,
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for ReducingGenerator<D> {
+    fn id(&self) -> String {
+        "ReducingExtensionGenerator".to_string()
+    }
+
     fn dependencies(&self) -> Vec<Target> {
         ReducingExtensionGate::<D>::wires_alpha()
             .chain(ReducingExtensionGate::<D>::wires_old_acc())
@@ -271,6 +217,17 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for Reduci
             out_buffer.set_extension_target(accs[i], computed_acc);
             acc = computed_acc;
         }
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> IoResult<()> {
+        dst.write_usize(self.row)?;
+        <ReducingExtensionGate<D> as Gate<F, D>>::serialize(&self.gate, dst)
+    }
+
+    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
+        let row = src.read_usize()?;
+        let gate = <ReducingExtensionGate<D> as Gate<F, D>>::deserialize(src)?;
+        Ok(Self { row, gate })
     }
 }
 

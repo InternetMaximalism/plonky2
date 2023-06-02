@@ -2,7 +2,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use hashbrown::HashMap;
-use itertools::Itertools;
+use itertools::{zip_eq, Itertools};
 
 use crate::field::extension::{Extendable, FieldExtension};
 use crate::field::types::Field;
@@ -14,7 +14,7 @@ use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::target::{BoolTarget, Target};
 use crate::iop::wire::Wire;
 use crate::plonk::circuit_data::{VerifierCircuitTarget, VerifierOnlyCircuitData};
-use crate::plonk::config::{AlgebraicHasher, GenericConfig};
+use crate::plonk::config::{AlgebraicHasher, GenericConfig, Hasher};
 use crate::plonk::proof::{Proof, ProofTarget, ProofWithPublicInputs, ProofWithPublicInputsTarget};
 
 pub trait WitnessWrite<F: Field> {
@@ -43,13 +43,11 @@ pub trait WitnessWrite<F: Field> {
     where
         F: RichField + Extendable<D>,
     {
-        self.set_target_arr(et.0, value.to_basefield_array());
+        self.set_target_arr(&et.0, &value.to_basefield_array());
     }
 
-    fn set_target_arr<const N: usize>(&mut self, targets: [Target; N], values: [F; N]) {
-        (0..N).for_each(|i| {
-            self.set_target(targets[i], values[i]);
-        });
+    fn set_target_arr(&mut self, targets: &[Target], values: &[F]) {
+        zip_eq(targets, values).for_each(|(&target, &value)| self.set_target(target, value));
     }
 
     fn set_extension_targets<const D: usize>(
@@ -222,6 +220,19 @@ pub trait Witness<F: Field>: WitnessWrite<F> {
         HashOut {
             elements: self.get_targets(&ht.elements).try_into().unwrap(),
         }
+    }
+
+    fn get_merkle_cap_target<H: Hasher<F>>(&self, cap_target: MerkleCapTarget) -> MerkleCap<F, H>
+    where
+        F: RichField,
+        H: AlgebraicHasher<F>,
+    {
+        let cap = cap_target
+            .0
+            .iter()
+            .map(|hash_target| self.get_hash_target(*hash_target))
+            .collect();
+        MerkleCap(cap)
     }
 
     fn get_wire(&self, wire: Wire) -> F {

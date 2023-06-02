@@ -1,62 +1,14 @@
 use std::ops::{Add, AddAssign, Mul, Neg, Range, Shr, Sub, SubAssign};
 
+use ethereum_types::U256;
 use plonky2::field::extension::Extendable;
+use plonky2::field::types::{Field, PrimeField64};
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
+use static_assertions::const_assert;
 
-use crate::arithmetic::columns::{NUM_ARITH_COLUMNS, N_LIMBS};
-
-/// Emit an error message regarding unchecked range assumptions.
-/// Assumes the values in `cols` are `[cols[0], cols[0] + 1, ...,
-/// cols[0] + cols.len() - 1]`.
-///
-/// TODO: Hamish to delete this when he has implemented and integrated
-/// range checks.
-pub(crate) fn _range_check_error<const RC_BITS: u32>(
-    _file: &str,
-    _line: u32,
-    _cols: Range<usize>,
-    _signedness: &str,
-) {
-    // error!(
-    //     "{}:{}: arithmetic unit skipped {}-bit {} range-checks on columns {}--{}: not yet implemented",
-    //     line,
-    //     file,
-    //     RC_BITS,
-    //     signedness,
-    //     cols.start,
-    //     cols.end - 1,
-    // );
-}
-
-#[macro_export]
-macro_rules! range_check_error {
-    ($cols:ident, $rc_bits:expr) => {
-        $crate::arithmetic::utils::_range_check_error::<$rc_bits>(
-            file!(),
-            line!(),
-            $cols,
-            "unsigned",
-        );
-    };
-    ($cols:ident, $rc_bits:expr, signed) => {
-        $crate::arithmetic::utils::_range_check_error::<$rc_bits>(
-            file!(),
-            line!(),
-            $cols,
-            "signed",
-        );
-    };
-    ([$cols:ident], $rc_bits:expr) => {
-        $crate::arithmetic::utils::_range_check_error::<$rc_bits>(
-            file!(),
-            line!(),
-            &[$cols],
-            "unsigned",
-        );
-    };
-}
+use crate::arithmetic::columns::{LIMB_BITS, N_LIMBS};
 
 /// Return an array of `N` zeros of type T.
 pub(crate) fn pol_zero<T, const N: usize>() -> [T; N]
@@ -139,11 +91,11 @@ pub(crate) fn pol_sub_ext_circuit<F: RichField + Extendable<D>, const D: usize>(
     b: [ExtensionTarget<D>; N_LIMBS],
 ) -> [ExtensionTarget<D>; 2 * N_LIMBS - 1] {
     let zero = builder.zero_extension();
-    let mut sum = [zero; 2 * N_LIMBS - 1];
+    let mut diff = [zero; 2 * N_LIMBS - 1];
     for i in 0..N_LIMBS {
-        sum[i] = builder.sub_extension(a[i], b[i]);
+        diff[i] = builder.sub_extension(a[i], b[i]);
     }
-    sum
+    diff
 }
 
 /// a(x) -= b(x), but must have deg(a) >= deg(b).
@@ -186,19 +138,13 @@ where
     res
 }
 
-pub(crate) fn pol_mul_wide_ext_circuit<
-    F: RichField + Extendable<D>,
-    const D: usize,
-    const M: usize,
-    const N: usize,
-    const P: usize,
->(
+pub(crate) fn pol_mul_wide_ext_circuit<F: RichField + Extendable<D>, const D: usize>(
     builder: &mut CircuitBuilder<F, D>,
-    a: [ExtensionTarget<D>; M],
-    b: [ExtensionTarget<D>; N],
-) -> [ExtensionTarget<D>; P] {
+    a: [ExtensionTarget<D>; N_LIMBS],
+    b: [ExtensionTarget<D>; N_LIMBS],
+) -> [ExtensionTarget<D>; 2 * N_LIMBS - 1] {
     let zero = builder.zero_extension();
-    let mut res = [zero; P];
+    let mut res = [zero; 2 * N_LIMBS - 1];
     for (i, &ai) in a.iter().enumerate() {
         for (j, &bj) in b.iter().enumerate() {
             res[i + j] = builder.mul_add_extension(ai, bj, res[i + j]);
@@ -281,17 +227,6 @@ where
     zero_extend
 }
 
-pub(crate) fn pol_extend_ext_circuit<F: RichField + Extendable<D>, const D: usize>(
-    builder: &mut CircuitBuilder<F, D>,
-    a: [ExtensionTarget<D>; N_LIMBS],
-) -> [ExtensionTarget<D>; 2 * N_LIMBS - 1] {
-    let zero = builder.zero_extension();
-    let mut zero_extend = [zero; 2 * N_LIMBS - 1];
-
-    zero_extend[..N_LIMBS].copy_from_slice(&a);
-    zero_extend
-}
-
 /// Given polynomial a(x) = \sum_{i=0}^{N-2} a[i] x^i and an element
 /// `root`, return b = (x - root) * a(x).
 pub(crate) fn pol_adjoin_root<T, U, const N: usize>(a: [T; N], root: U) -> [T; N]
@@ -322,8 +257,8 @@ pub(crate) fn pol_adjoin_root_ext_circuit<
 ) -> [ExtensionTarget<D>; N] {
     let zero = builder.zero_extension();
     let mut res = [zero; N];
-    // res[deg] = NEG_ONE * root * a[0] + ZERO * zero
-    res[0] = builder.arithmetic_extension(F::NEG_ONE, F::ZERO, root, a[0], zero);
+    // res[0] = NEG_ONE * root * a[0] + ZERO * zero
+    res[0] = builder.mul_extension_with_const(F::NEG_ONE, root, a[0]);
     for deg in 1..N {
         // res[deg] = NEG_ONE * root * a[deg] + ONE * a[deg - 1]
         res[deg] = builder.arithmetic_extension(F::NEG_ONE, F::ONE, root, a[deg], a[deg - 1]);
@@ -368,31 +303,39 @@ where
 
 /// Read the range `value_idxs` of values from `lv` into an array of
 /// length `N`. Panics if the length of the range is not `N`.
-pub(crate) fn read_value<const N: usize, T: Copy>(
-    lv: &[T; NUM_ARITH_COLUMNS],
-    value_idxs: Range<usize>,
-) -> [T; N] {
+pub(crate) fn read_value<const N: usize, T: Copy>(lv: &[T], value_idxs: Range<usize>) -> [T; N] {
     lv[value_idxs].try_into().unwrap()
-}
-
-/// Read the range `value_idxs` of values from `lv` into an array of
-/// length `N`, interpreting the values as `u64`s. Panics if the
-/// length of the range is not `N`.
-pub(crate) fn read_value_u64_limbs<const N: usize, F: RichField>(
-    lv: &[F; NUM_ARITH_COLUMNS],
-    value_idxs: Range<usize>,
-) -> [u64; N] {
-    let limbs: [_; N] = lv[value_idxs].try_into().unwrap();
-    limbs.map(|c| F::to_canonical_u64(&c))
 }
 
 /// Read the range `value_idxs` of values from `lv` into an array of
 /// length `N`, interpreting the values as `i64`s. Panics if the
 /// length of the range is not `N`.
-pub(crate) fn read_value_i64_limbs<const N: usize, F: RichField>(
-    lv: &[F; NUM_ARITH_COLUMNS],
+pub(crate) fn read_value_i64_limbs<const N: usize, F: PrimeField64>(
+    lv: &[F],
     value_idxs: Range<usize>,
 ) -> [i64; N] {
     let limbs: [_; N] = lv[value_idxs].try_into().unwrap();
-    limbs.map(|c| F::to_canonical_u64(&c) as i64)
+    limbs.map(|c| c.to_canonical_u64() as i64)
+}
+
+#[inline]
+fn u64_to_array<F: Field>(out: &mut [F], x: u64) {
+    const_assert!(LIMB_BITS == 16);
+    debug_assert!(out.len() == 4);
+
+    out[0] = F::from_canonical_u16(x as u16);
+    out[1] = F::from_canonical_u16((x >> 16) as u16);
+    out[2] = F::from_canonical_u16((x >> 32) as u16);
+    out[3] = F::from_canonical_u16((x >> 48) as u16);
+}
+
+// TODO: Refactor/replace u256_limbs in evm/src/util.rs
+pub(crate) fn u256_to_array<F: Field>(out: &mut [F], x: U256) {
+    const_assert!(N_LIMBS == 16);
+    debug_assert!(out.len() == N_LIMBS);
+
+    u64_to_array(&mut out[0..4], x.0[0]);
+    u64_to_array(&mut out[4..8], x.0[1]);
+    u64_to_array(&mut out[8..12], x.0[2]);
+    u64_to_array(&mut out[12..16], x.0[3]);
 }

@@ -8,10 +8,11 @@ pub struct RegistersState {
     pub is_kernel: bool,
     pub stack_len: usize,
     pub context: usize,
+    pub gas_used: u64,
 }
 
 impl RegistersState {
-    pub(crate) fn effective_context(&self) -> usize {
+    pub(crate) fn code_context(&self) -> usize {
         if self.is_kernel {
             KERNEL_CONTEXT
         } else {
@@ -27,6 +28,7 @@ impl Default for RegistersState {
             is_kernel: true,
             stack_len: 0,
             context: 0,
+            gas_used: 0,
         }
     }
 }

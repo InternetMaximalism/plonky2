@@ -35,7 +35,7 @@ pre_rol:
     %mload_kernel_code(r_data)
     ADD
     // stack: virt + r, box, a, b, c, d, e, F, K, boxes, rounds, sides, virt  
-    %mload_kernel_general_u32_LE
+    %mload_current_general_u32_LE
     // stack:        x, box, a, b, c, d, e, F, K, boxes, rounds, sides, virt
     SWAP1  
     SWAP2 
@@ -72,7 +72,7 @@ post_rol:
 
 
 %macro get_round
-    // stack: sides, rounds
+    // stack:        sides , rounds
     %mul_const(5)  
     PUSH 10  
     SUB  

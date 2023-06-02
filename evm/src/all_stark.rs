@@ -4,6 +4,8 @@ use plonky2::field::extension::Extendable;
 use plonky2::field::types::Field;
 use plonky2::hash::hash_types::RichField;
 
+use crate::arithmetic::arithmetic_stark;
+use crate::arithmetic::arithmetic_stark::ArithmeticStark;
 use crate::config::StarkConfig;
 use crate::cpu::cpu_stark;
 use crate::cpu::cpu_stark::CpuStark;
@@ -13,7 +15,7 @@ use crate::keccak::keccak_stark;
 use crate::keccak::keccak_stark::KeccakStark;
 use crate::keccak_sponge::columns::KECCAK_RATE_BYTES;
 use crate::keccak_sponge::keccak_sponge_stark;
-use crate::keccak_sponge::keccak_sponge_stark::{num_logic_ctls, KeccakSpongeStark};
+use crate::keccak_sponge::keccak_sponge_stark::KeccakSpongeStark;
 use crate::logic;
 use crate::logic::LogicStark;
 use crate::memory::memory_stark;
@@ -22,6 +24,7 @@ use crate::stark::Stark;
 
 #[derive(Clone)]
 pub struct AllStark<F: RichField + Extendable<D>, const D: usize> {
+    pub arithmetic_stark: ArithmeticStark<F, D>,
     pub cpu_stark: CpuStark<F, D>,
     pub keccak_stark: KeccakStark<F, D>,
     pub keccak_sponge_stark: KeccakSpongeStark<F, D>,
@@ -33,6 +36,7 @@ pub struct AllStark<F: RichField + Extendable<D>, const D: usize> {
 impl<F: RichField + Extendable<D>, const D: usize> Default for AllStark<F, D> {
     fn default() -> Self {
         Self {
+            arithmetic_stark: ArithmeticStark::default(),
             cpu_stark: CpuStark::default(),
             keccak_stark: KeccakStark::default(),
             keccak_sponge_stark: KeccakSpongeStark::default(),
@@ -46,6 +50,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Default for AllStark<F, D> {
 impl<F: RichField + Extendable<D>, const D: usize> AllStark<F, D> {
     pub(crate) fn nums_permutation_zs(&self, config: &StarkConfig) -> [usize; NUM_TABLES] {
         [
+            self.arithmetic_stark.num_permutation_batches(config),
             self.cpu_stark.num_permutation_batches(config),
             self.keccak_stark.num_permutation_batches(config),
             self.keccak_sponge_stark.num_permutation_batches(config),
@@ -56,6 +61,7 @@ impl<F: RichField + Extendable<D>, const D: usize> AllStark<F, D> {
 
     pub(crate) fn permutation_batch_sizes(&self) -> [usize; NUM_TABLES] {
         [
+            self.arithmetic_stark.permutation_batch_size(),
             self.cpu_stark.permutation_batch_size(),
             self.keccak_stark.permutation_batch_size(),
             self.keccak_sponge_stark.permutation_batch_size(),
@@ -67,11 +73,12 @@ impl<F: RichField + Extendable<D>, const D: usize> AllStark<F, D> {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Table {
-    Cpu = 0,
-    Keccak = 1,
-    KeccakSponge = 2,
-    Logic = 3,
-    Memory = 4,
+    Arithmetic = 0,
+    Cpu = 1,
+    Keccak = 2,
+    KeccakSponge = 3,
+    Logic = 4,
+    Memory = 5,
 }
 
 pub(crate) const NUM_TABLES: usize = Table::Memory as usize + 1;
@@ -79,6 +86,7 @@ pub(crate) const NUM_TABLES: usize = Table::Memory as usize + 1;
 impl Table {
     pub(crate) fn all() -> [Self; NUM_TABLES] {
         [
+            Self::Arithmetic,
             Self::Cpu,
             Self::Keccak,
             Self::KeccakSponge,
@@ -89,12 +97,15 @@ impl Table {
 }
 
 pub(crate) fn all_cross_table_lookups<F: Field>() -> Vec<CrossTableLookup<F>> {
-    let mut ctls = vec![ctl_keccak(), ctl_logic(), ctl_memory(), ctl_keccak_sponge()];
+    let mut ctls = vec![
+        ctl_arithmetic(),
+        ctl_keccak_sponge(),
+        ctl_keccak(),
+        ctl_logic(),
+        ctl_memory(),
+    ];
     // TODO: Some CTLs temporarily disabled while we get them working.
-    disable_ctl(&mut ctls[0]);
-    disable_ctl(&mut ctls[1]);
-    disable_ctl(&mut ctls[2]);
-    disable_ctl(&mut ctls[3]);
+    disable_ctl(&mut ctls[4]);
     ctls
 }
 
@@ -103,6 +114,13 @@ fn disable_ctl<F: Field>(ctl: &mut CrossTableLookup<F>) {
         table.filter_column = Some(Column::zero());
     }
     ctl.looked_table.filter_column = Some(Column::zero());
+}
+
+fn ctl_arithmetic<F: Field>() -> CrossTableLookup<F> {
+    CrossTableLookup::new(
+        vec![cpu_stark::ctl_arithmetic_rows()],
+        arithmetic_stark::ctl_arithmetic_rows(),
+    )
 }
 
 fn ctl_keccak<F: Field>() -> CrossTableLookup<F> {
@@ -116,7 +134,7 @@ fn ctl_keccak<F: Field>() -> CrossTableLookup<F> {
         keccak_stark::ctl_data(),
         Some(keccak_stark::ctl_filter()),
     );
-    CrossTableLookup::new(vec![keccak_sponge_looking], keccak_looked, None)
+    CrossTableLookup::new(vec![keccak_sponge_looking], keccak_looked)
 }
 
 fn ctl_keccak_sponge<F: Field>() -> CrossTableLookup<F> {
@@ -130,7 +148,7 @@ fn ctl_keccak_sponge<F: Field>() -> CrossTableLookup<F> {
         keccak_sponge_stark::ctl_looked_data(),
         Some(keccak_sponge_stark::ctl_looked_filter()),
     );
-    CrossTableLookup::new(vec![cpu_looking], keccak_sponge_looked, None)
+    CrossTableLookup::new(vec![cpu_looking], keccak_sponge_looked)
 }
 
 fn ctl_logic<F: Field>() -> CrossTableLookup<F> {
@@ -140,18 +158,17 @@ fn ctl_logic<F: Field>() -> CrossTableLookup<F> {
         Some(cpu_stark::ctl_filter_logic()),
     );
     let mut all_lookers = vec![cpu_looking];
-    for i in 0..num_logic_ctls() {
+    for i in 0..keccak_sponge_stark::num_logic_ctls() {
         let keccak_sponge_looking = TableWithColumns::new(
             Table::KeccakSponge,
             keccak_sponge_stark::ctl_looking_logic(i),
-            // TODO: Double check, but I think it's the same filter for memory and logic?
-            Some(keccak_sponge_stark::ctl_looking_memory_filter(i)),
+            Some(keccak_sponge_stark::ctl_looking_logic_filter()),
         );
         all_lookers.push(keccak_sponge_looking);
     }
     let logic_looked =
         TableWithColumns::new(Table::Logic, logic::ctl_data(), Some(logic::ctl_filter()));
-    CrossTableLookup::new(all_lookers, logic_looked, None)
+    CrossTableLookup::new(all_lookers, logic_looked)
 }
 
 fn ctl_memory<F: Field>() -> CrossTableLookup<F> {
@@ -183,5 +200,5 @@ fn ctl_memory<F: Field>() -> CrossTableLookup<F> {
         memory_stark::ctl_data(),
         Some(memory_stark::ctl_filter()),
     );
-    CrossTableLookup::new(all_lookers, memory_looked, None)
+    CrossTableLookup::new(all_lookers, memory_looked)
 }

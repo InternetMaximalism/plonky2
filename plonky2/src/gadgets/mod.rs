@@ -1,9 +1,10 @@
 pub mod arithmetic;
 pub mod arithmetic_extension;
 pub mod hash;
+pub mod interpolation;
 pub mod polynomial;
 pub mod random_access;
 pub mod range_check;
 pub mod select;
 pub mod split_base;
-pub(crate) mod split_join;
+pub mod split_join;

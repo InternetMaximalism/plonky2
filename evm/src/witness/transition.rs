@@ -1,19 +1,22 @@
-use itertools::Itertools;
+use anyhow::bail;
+use log::log_enabled;
 use plonky2::field::types::Field;
 
 use crate::cpu::columns::CpuColumnsView;
 use crate::cpu::kernel::aggregator::KERNEL;
+use crate::cpu::stack_bounds::{DECREMENTING_FLAGS, INCREMENTING_FLAGS, MAX_USER_STACK_SIZE};
 use crate::generation::state::GenerationState;
 use crate::memory::segments::Segment;
 use crate::witness::errors::ProgramError;
+use crate::witness::gas::gas_to_charge;
 use crate::witness::memory::MemoryAddress;
 use crate::witness::operation::*;
 use crate::witness::state::RegistersState;
-use crate::witness::util::{mem_read_code_with_log_and_fill, stack_peek};
+use crate::witness::util::mem_read_code_with_log_and_fill;
 use crate::{arithmetic, logic};
 
 fn read_code_memory<F: Field>(state: &mut GenerationState<F>, row: &mut CpuColumnsView<F>) -> u8 {
-    let code_context = state.registers.effective_context();
+    let code_context = state.registers.code_context();
     row.code_context = F::from_canonical_usize(code_context);
 
     let address = MemoryAddress::new(code_context, Segment::Code, state.registers.program_counter);
@@ -51,6 +54,9 @@ fn decode(registers: RegistersState, opcode: u8) -> Result<Operation, ProgramErr
         (0x0e, true) => Ok(Operation::BinaryArithmetic(
             arithmetic::BinaryOperator::SubFp254,
         )),
+        (0x0f, true) => Ok(Operation::TernaryArithmetic(
+            arithmetic::TernaryOperator::SubMod,
+        )),
         (0x10, _) => Ok(Operation::BinaryArithmetic(arithmetic::BinaryOperator::Lt)),
         (0x11, _) => Ok(Operation::BinaryArithmetic(arithmetic::BinaryOperator::Gt)),
         (0x12, _) => Ok(Operation::Syscall(opcode)),
@@ -61,9 +67,11 @@ fn decode(registers: RegistersState, opcode: u8) -> Result<Operation, ProgramErr
         (0x17, _) => Ok(Operation::BinaryLogic(logic::Op::Or)),
         (0x18, _) => Ok(Operation::BinaryLogic(logic::Op::Xor)),
         (0x19, _) => Ok(Operation::Not),
-        (0x1a, _) => Ok(Operation::Byte),
-        (0x1b, _) => Ok(Operation::BinaryArithmetic(arithmetic::BinaryOperator::Shl)),
-        (0x1c, _) => Ok(Operation::BinaryArithmetic(arithmetic::BinaryOperator::Shr)),
+        (0x1a, _) => Ok(Operation::BinaryArithmetic(
+            arithmetic::BinaryOperator::Byte,
+        )),
+        (0x1b, _) => Ok(Operation::Shl),
+        (0x1c, _) => Ok(Operation::Shr),
         (0x1d, _) => Ok(Operation::Syscall(opcode)),
         (0x20, _) => Ok(Operation::Syscall(opcode)),
         (0x21, true) => Ok(Operation::KeccakGeneral),
@@ -103,7 +111,7 @@ fn decode(registers: RegistersState, opcode: u8) -> Result<Operation, ProgramErr
         (0x57, _) => Ok(Operation::Jumpi),
         (0x58, _) => Ok(Operation::Pc),
         (0x59, _) => Ok(Operation::Syscall(opcode)),
-        (0x5a, _) => Ok(Operation::Gas),
+        (0x5a, _) => Ok(Operation::Syscall(opcode)),
         (0x5b, _) => Ok(Operation::Jumpdest),
         (0x60..=0x7f, _) => Ok(Operation::Push(opcode & 0x1f)),
         (0x80..=0x8f, _) => Ok(Operation::Dup(opcode & 0xf)),
@@ -113,10 +121,13 @@ fn decode(registers: RegistersState, opcode: u8) -> Result<Operation, ProgramErr
         (0xa2, _) => Ok(Operation::Syscall(opcode)),
         (0xa3, _) => Ok(Operation::Syscall(opcode)),
         (0xa4, _) => Ok(Operation::Syscall(opcode)),
-        (0xa5, _) => panic!(
-            "Kernel panic at {}",
-            KERNEL.offset_name(registers.program_counter)
-        ),
+        (0xa5, _) => {
+            log::warn!(
+                "Kernel panic at {}",
+                KERNEL.offset_name(registers.program_counter),
+            );
+            Err(ProgramError::KernelPanic)
+        }
         (0xf0, _) => Ok(Operation::Syscall(opcode)),
         (0xf1, _) => Ok(Operation::Syscall(opcode)),
         (0xf2, _) => Ok(Operation::Syscall(opcode)),
@@ -125,7 +136,6 @@ fn decode(registers: RegistersState, opcode: u8) -> Result<Operation, ProgramErr
         (0xf5, _) => Ok(Operation::Syscall(opcode)),
         (0xf6, true) => Ok(Operation::GetContext),
         (0xf7, true) => Ok(Operation::SetContext),
-        (0xf8, true) => Ok(Operation::ConsumeGas),
         (0xf9, true) => Ok(Operation::ExitKernel),
         (0xfa, _) => Ok(Operation::Syscall(opcode)),
         (0xfb, true) => Ok(Operation::MloadGeneral),
@@ -147,7 +157,6 @@ fn fill_op_flag<F: Field>(op: Operation, row: &mut CpuColumnsView<F>) {
         Operation::Swap(_) => &mut flags.swap,
         Operation::Iszero => &mut flags.iszero,
         Operation::Not => &mut flags.not,
-        Operation::Byte => &mut flags.byte,
         Operation::Syscall(_) => &mut flags.syscall,
         Operation::Eq => &mut flags.eq,
         Operation::BinaryLogic(logic::Op::And) => &mut flags.and,
@@ -160,24 +169,24 @@ fn fill_op_flag<F: Field>(op: Operation, row: &mut CpuColumnsView<F>) {
         Operation::BinaryArithmetic(arithmetic::BinaryOperator::Mod) => &mut flags.mod_,
         Operation::BinaryArithmetic(arithmetic::BinaryOperator::Lt) => &mut flags.lt,
         Operation::BinaryArithmetic(arithmetic::BinaryOperator::Gt) => &mut flags.gt,
-        Operation::BinaryArithmetic(arithmetic::BinaryOperator::Shl) => &mut flags.shl,
-        Operation::BinaryArithmetic(arithmetic::BinaryOperator::Shr) => &mut flags.shr,
+        Operation::BinaryArithmetic(arithmetic::BinaryOperator::Byte) => &mut flags.byte,
+        Operation::Shl => &mut flags.shl,
+        Operation::Shr => &mut flags.shr,
         Operation::BinaryArithmetic(arithmetic::BinaryOperator::AddFp254) => &mut flags.addfp254,
         Operation::BinaryArithmetic(arithmetic::BinaryOperator::MulFp254) => &mut flags.mulfp254,
         Operation::BinaryArithmetic(arithmetic::BinaryOperator::SubFp254) => &mut flags.subfp254,
         Operation::TernaryArithmetic(arithmetic::TernaryOperator::AddMod) => &mut flags.addmod,
         Operation::TernaryArithmetic(arithmetic::TernaryOperator::MulMod) => &mut flags.mulmod,
+        Operation::TernaryArithmetic(arithmetic::TernaryOperator::SubMod) => &mut flags.submod,
         Operation::KeccakGeneral => &mut flags.keccak_general,
         Operation::ProverInput => &mut flags.prover_input,
         Operation::Pop => &mut flags.pop,
         Operation::Jump => &mut flags.jump,
         Operation::Jumpi => &mut flags.jumpi,
         Operation::Pc => &mut flags.pc,
-        Operation::Gas => &mut flags.gas,
         Operation::Jumpdest => &mut flags.jumpdest,
         Operation::GetContext => &mut flags.get_context,
         Operation::SetContext => &mut flags.set_context,
-        Operation::ConsumeGas => &mut flags.consume_gas,
         Operation::ExitKernel => &mut flags.exit_kernel,
         Operation::MloadGeneral => &mut flags.mload_general,
         Operation::MstoreGeneral => &mut flags.mstore_general,
@@ -195,7 +204,8 @@ fn perform_op<F: Field>(
         Operation::Swap(n) => generate_swap(n, state, row)?,
         Operation::Iszero => generate_iszero(state, row)?,
         Operation::Not => generate_not(state, row)?,
-        Operation::Byte => generate_byte(state, row)?,
+        Operation::Shl => generate_shl(state, row)?,
+        Operation::Shr => generate_shr(state, row)?,
         Operation::Syscall(opcode) => generate_syscall(opcode, state, row)?,
         Operation::Eq => generate_eq(state, row)?,
         Operation::BinaryLogic(binary_logic_op) => {
@@ -209,11 +219,9 @@ fn perform_op<F: Field>(
         Operation::Jump => generate_jump(state, row)?,
         Operation::Jumpi => generate_jumpi(state, row)?,
         Operation::Pc => generate_pc(state, row)?,
-        Operation::Gas => todo!(),
         Operation::Jumpdest => generate_jumpdest(state, row)?,
         Operation::GetContext => generate_get_context(state, row)?,
         Operation::SetContext => generate_set_context(state, row)?,
-        Operation::ConsumeGas => todo!(),
         Operation::ExitKernel => generate_exit_kernel(state, row)?,
         Operation::MloadGeneral => generate_mload_general(state, row)?,
         Operation::MstoreGeneral => generate_mstore_general(state, row)?,
@@ -226,6 +234,8 @@ fn perform_op<F: Field>(
         _ => 1,
     };
 
+    state.registers.gas_used += gas_to_charge(op);
+
     Ok(())
 }
 
@@ -236,19 +246,47 @@ fn try_perform_instruction<F: Field>(state: &mut GenerationState<F>) -> Result<(
     row.context = F::from_canonical_usize(state.registers.context);
     row.program_counter = F::from_canonical_usize(state.registers.program_counter);
     row.is_kernel_mode = F::from_bool(state.registers.is_kernel);
+    row.gas = F::from_canonical_u64(state.registers.gas_used);
     row.stack_len = F::from_canonical_usize(state.registers.stack_len);
 
     let opcode = read_code_memory(state, &mut row);
     let op = decode(state.registers, opcode)?;
 
-    log_instruction(state, op);
+    if state.registers.is_kernel {
+        log_kernel_instruction(state, op);
+    } else {
+        log::debug!("User instruction: {:?}", op);
+    }
 
     fill_op_flag(op, &mut row);
+
+    let check_underflow: F = DECREMENTING_FLAGS.map(|i| row[i]).into_iter().sum();
+    let check_overflow: F = INCREMENTING_FLAGS.map(|i| row[i]).into_iter().sum();
+    let no_check = F::ONE - (check_underflow + check_overflow);
+
+    let disallowed_len = check_overflow * F::from_canonical_usize(MAX_USER_STACK_SIZE) - no_check;
+    let diff = row.stack_len - disallowed_len;
+
+    let user_mode = F::ONE - row.is_kernel_mode;
+    let rhs = user_mode + check_underflow;
+
+    row.stack_len_bounds_aux = match diff.try_inverse() {
+        Some(diff_inv) => diff_inv * rhs, // `rhs` may be a value other than 1 or 0
+        None => {
+            assert_eq!(rhs, F::ZERO);
+            F::ZERO
+        }
+    };
 
     perform_op(state, op, row)
 }
 
-fn log_instruction<F: Field>(state: &mut GenerationState<F>, op: Operation) {
+fn log_kernel_instruction<F: Field>(state: &mut GenerationState<F>, op: Operation) {
+    // The logic below is a bit costly, so skip it if debug logs aren't enabled.
+    if !log_enabled!(log::Level::Debug) {
+        return;
+    }
+
     let pc = state.registers.program_counter;
     let is_interesting_offset = KERNEL
         .offset_label(pc)
@@ -261,25 +299,22 @@ fn log_instruction<F: Field>(state: &mut GenerationState<F>, op: Operation) {
     };
     log::log!(
         level,
-        "Cycle {}, pc={}, instruction={:?}, stack={:?}",
+        "Cycle {}, ctx={}, pc={}, instruction={:?}, stack={:?}",
         state.traces.clock(),
+        state.registers.context,
         KERNEL.offset_name(pc),
         op,
-        (0..state.registers.stack_len)
-            .map(|i| stack_peek(state, i).unwrap())
-            .collect_vec()
+        state.stack()
     );
 
-    if state.registers.is_kernel && pc >= KERNEL.code.len() {
-        panic!("Kernel PC is out of range: {}", pc);
-    }
+    assert!(pc < KERNEL.code.len(), "Kernel PC is out of range: {}", pc);
 }
 
-fn handle_error<F: Field>(_state: &mut GenerationState<F>) {
-    todo!("generation for exception handling is not implemented");
+fn handle_error<F: Field>(_state: &mut GenerationState<F>) -> anyhow::Result<()> {
+    bail!("TODO: generation for exception handling is not implemented");
 }
 
-pub(crate) fn transition<F: Field>(state: &mut GenerationState<F>) {
+pub(crate) fn transition<F: Field>(state: &mut GenerationState<F>) -> anyhow::Result<()> {
     let checkpoint = state.checkpoint();
     let result = try_perform_instruction(state);
 
@@ -288,11 +323,18 @@ pub(crate) fn transition<F: Field>(state: &mut GenerationState<F>) {
             state
                 .memory
                 .apply_ops(state.traces.mem_ops_since(checkpoint.traces));
+            Ok(())
         }
         Err(e) => {
             if state.registers.is_kernel {
                 let offset_name = KERNEL.offset_name(state.registers.program_counter);
-                panic!("exception in kernel mode at {}: {:?}", offset_name, e);
+                bail!(
+                    "{:?} in kernel at pc={}, stack={:?}, memory={:?}",
+                    e,
+                    offset_name,
+                    state.stack(),
+                    state.memory.contexts[0].segments[Segment::KernelGeneral as usize].content,
+                );
             }
             state.rollback(checkpoint);
             handle_error(state)

@@ -8,8 +8,8 @@ use serde::Serialize;
 use crate::field::extension::quadratic::QuadraticExtension;
 use crate::field::extension::{Extendable, FieldExtension};
 use crate::field::goldilocks_field::GoldilocksField;
-use crate::hash::hash_types::{HashOut, HashOutTarget, RichField};
-use crate::hash::hashing::{PlonkyPermutation, SPONGE_WIDTH};
+use crate::hash::hash_types::{HashOut, RichField};
+use crate::hash::hashing::PlonkyPermutation;
 use crate::hash::keccak::KeccakHash;
 use crate::hash::poseidon::PoseidonHash;
 use crate::iop::target::{BoolTarget, Target};
@@ -25,7 +25,7 @@ pub trait GenericHashOut<F: RichField>:
 }
 
 /// Trait for hash functions.
-pub trait Hasher<F: RichField>: Sized + Clone + Debug + Eq + PartialEq {
+pub trait Hasher<F: RichField>: Sized + Copy + Debug + Eq + PartialEq {
     /// Size of `Hash` in bytes.
     const HASH_SIZE: usize;
 
@@ -44,7 +44,7 @@ pub trait Hasher<F: RichField>: Sized + Clone + Debug + Eq + PartialEq {
     fn hash_pad(input: &[F]) -> Self::Hash {
         let mut padded_input = input.to_vec();
         padded_input.push(F::ONE);
-        while (padded_input.len() + 1) % SPONGE_WIDTH != 0 {
+        while (padded_input.len() + 1) % Self::Permutation::WIDTH != 0 {
             padded_input.push(F::ZERO);
         }
         padded_input.push(F::ONE);
@@ -54,7 +54,7 @@ pub trait Hasher<F: RichField>: Sized + Clone + Debug + Eq + PartialEq {
     /// Hash the slice if necessary to reduce its length to ~256 bits. If it already fits, this is a
     /// no-op.
     fn hash_or_noop(inputs: &[F]) -> Self::Hash {
-        if inputs.len() <= 4 {
+        if inputs.len() * 8 <= Self::HASH_SIZE {
             let mut inputs_bytes = vec![0u8; Self::HASH_SIZE];
             for i in 0..inputs.len() {
                 inputs_bytes[i * 8..(i + 1) * 8]
@@ -71,16 +71,15 @@ pub trait Hasher<F: RichField>: Sized + Clone + Debug + Eq + PartialEq {
 
 /// Trait for algebraic hash functions, built from a permutation using the sponge construction.
 pub trait AlgebraicHasher<F: RichField>: Hasher<F, Hash = HashOut<F>> {
-    // TODO: Adding a `const WIDTH: usize` here yields a compiler error down the line.
-    // Maybe try again in a while.
+    type AlgebraicPermutation: PlonkyPermutation<Target>;
 
     /// Circuit to conditionally swap two chunks of the inputs (useful in verifying Merkle proofs),
     /// then apply the permutation.
     fn permute_swapped<const D: usize>(
-        inputs: [Target; SPONGE_WIDTH],
+        inputs: Self::AlgebraicPermutation,
         swap: BoolTarget,
         builder: &mut CircuitBuilder<F, D>,
-    ) -> [Target; SPONGE_WIDTH]
+    ) -> Self::AlgebraicPermutation
     where
         F: RichField + Extendable<D>;
 
@@ -108,7 +107,7 @@ pub trait GenericConfig<const D: usize>:
 }
 
 /// Configuration using Poseidon over the Goldilocks field.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize)]
 pub struct PoseidonGoldilocksConfig;
 impl GenericConfig<2> for PoseidonGoldilocksConfig {
     type F = GoldilocksField;

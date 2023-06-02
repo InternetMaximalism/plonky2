@@ -12,6 +12,7 @@ use crate::plonk::circuit_data::{
 };
 use crate::plonk::config::{AlgebraicHasher, GenericConfig};
 use crate::plonk::proof::{ProofWithPublicInputs, ProofWithPublicInputsTarget};
+use crate::util::serialization::{Buffer, IoResult, Read, Write};
 
 impl<C: GenericConfig<D>, const D: usize> VerifierOnlyCircuitData<C, D> {
     pub fn from_slice(slice: &[C::F], common_data: &CommonCircuitData<C::F, D>) -> Result<Self>
@@ -40,7 +41,24 @@ impl<C: GenericConfig<D>, const D: usize> VerifierOnlyCircuitData<C, D> {
 }
 
 impl VerifierCircuitTarget {
-    pub fn from_slice<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
+    pub fn to_bytes(&self) -> IoResult<Vec<u8>> {
+        let mut buffer = Vec::new();
+        buffer.write_target_merkle_cap(&self.constants_sigmas_cap)?;
+        buffer.write_target_hash(&self.circuit_digest)?;
+        Ok(buffer)
+    }
+
+    pub fn from_bytes(bytes: Vec<u8>) -> IoResult<Self> {
+        let mut buffer = Buffer::new(bytes);
+        let constants_sigmas_cap = buffer.read_target_merkle_cap()?;
+        let circuit_digest = buffer.read_target_hash()?;
+        Ok(Self {
+            constants_sigmas_cap,
+            circuit_digest,
+        })
+    }
+
+    fn from_slice<F: RichField + Extendable<D>, const D: usize>(
         slice: &[Target],
         common_data: &CommonCircuitData<F, D>,
     ) -> Result<Self> {
@@ -101,7 +119,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             self.goal_common_data = Some(common_data.clone());
         }
 
-        let inner_cyclic_pis = VerifierCircuitTarget::from_slice::<F, C, D>(
+        let inner_cyclic_pis = VerifierCircuitTarget::from_slice::<F, D>(
             &cyclic_proof_with_pis.public_inputs,
             common_data,
         )?;
@@ -188,7 +206,7 @@ mod tests {
     use crate::hash::poseidon::{PoseidonHash, PoseidonPermutation};
     use crate::iop::witness::{PartialWitness, WitnessWrite};
     use crate::plonk::circuit_builder::CircuitBuilder;
-    use crate::plonk::circuit_data::{CircuitConfig, CommonCircuitData, VerifierCircuitTarget};
+    use crate::plonk::circuit_data::{CircuitConfig, CommonCircuitData};
     use crate::plonk::config::{AlgebraicHasher, GenericConfig, PoseidonGoldilocksConfig};
     use crate::recursion::cyclic_recursion::check_cyclic_proof_verifier_data;
     use crate::recursion::dummy_circuit::cyclic_base_proof;
@@ -207,21 +225,17 @@ mod tests {
         let data = builder.build::<C>();
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
-        let proof = builder.add_virtual_proof_with_pis::<C>(&data.common);
-        let verifier_data = VerifierCircuitTarget {
-            constants_sigmas_cap: builder.add_virtual_cap(data.common.config.fri_config.cap_height),
-            circuit_digest: builder.add_virtual_hash(),
-        };
+        let proof = builder.add_virtual_proof_with_pis(&data.common);
+        let verifier_data =
+            builder.add_virtual_verifier_data(data.common.config.fri_config.cap_height);
         builder.verify_proof::<C>(&proof, &verifier_data, &data.common);
         let data = builder.build::<C>();
 
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
-        let proof = builder.add_virtual_proof_with_pis::<C>(&data.common);
-        let verifier_data = VerifierCircuitTarget {
-            constants_sigmas_cap: builder.add_virtual_cap(data.common.config.fri_config.cap_height),
-            circuit_digest: builder.add_virtual_hash(),
-        };
+        let proof = builder.add_virtual_proof_with_pis(&data.common);
+        let verifier_data =
+            builder.add_virtual_verifier_data(data.common.config.fri_config.cap_height);
         builder.verify_proof::<C>(&proof, &verifier_data, &data.common);
         while builder.num_gates() < 1 << 12 {
             builder.add_gate(NoopGate, vec![]);
@@ -261,7 +275,7 @@ mod tests {
         let condition = builder.add_virtual_bool_target_safe();
 
         // Unpack inner proof's public inputs.
-        let inner_cyclic_proof_with_pis = builder.add_virtual_proof_with_pis::<C>(&common_data);
+        let inner_cyclic_proof_with_pis = builder.add_virtual_proof_with_pis(&common_data);
         let inner_cyclic_pis = &inner_cyclic_proof_with_pis.public_inputs;
         let inner_cyclic_initial_hash = HashOutTarget::try_from(&inner_cyclic_pis[0..4]).unwrap();
         let inner_cyclic_latest_hash = HashOutTarget::try_from(&inner_cyclic_pis[4..8]).unwrap();
@@ -351,7 +365,7 @@ mod tests {
     fn iterate_poseidon<F: RichField>(initial_state: [F; 4], n: usize) -> [F; 4] {
         let mut current = initial_state;
         for _ in 0..n {
-            current = hash_n_to_hash_no_pad::<F, PoseidonPermutation>(&current).elements;
+            current = hash_n_to_hash_no_pad::<F, PoseidonPermutation<F>>(&current).elements;
         }
         current
     }

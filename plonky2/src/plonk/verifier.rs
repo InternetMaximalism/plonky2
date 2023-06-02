@@ -27,7 +27,7 @@ pub(crate) fn verify<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, c
         common_data,
     )?;
 
-    verify_with_challenges(
+    verify_with_challenges::<F, C, D>(
         proof_with_pis.proof,
         public_inputs_hash,
         challenges,
@@ -60,7 +60,7 @@ pub(crate) fn verify_with_challenges<
     let partial_products = &proof.openings.partial_products;
 
     // Evaluate the vanishing polynomial at our challenge point, zeta.
-    let vanishing_polys_zeta = eval_vanishing_poly::<F, C, D>(
+    let vanishing_polys_zeta = eval_vanishing_poly::<F, D>(
         common_data,
         challenges.plonk_zeta,
         vars,

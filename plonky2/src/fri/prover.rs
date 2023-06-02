@@ -1,16 +1,16 @@
 use alloc::vec::Vec;
 
-use maybe_rayon::*;
+use plonky2_maybe_rayon::*;
 
 use crate::field::extension::{flatten, unflatten, Extendable};
 use crate::field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use crate::fri::proof::{FriInitialTreeProof, FriProof, FriQueryRound, FriQueryStep};
 use crate::fri::{FriConfig, FriParams};
 use crate::hash::hash_types::RichField;
-use crate::hash::hashing::{PlonkyPermutation, SPONGE_RATE};
+use crate::hash::hashing::PlonkyPermutation;
 use crate::hash::merkle_tree::MerkleTree;
 use crate::iop::challenger::Challenger;
-use crate::plonk::config::{GenericConfig, Hasher};
+use crate::plonk::config::GenericConfig;
 use crate::plonk::plonk_common::reduce_with_powers;
 use crate::timed;
 use crate::util::reverse_index_bits_in_place;
@@ -126,8 +126,8 @@ fn fri_proof_of_work<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, c
     // since it stores vectors, which means allocations. We'd like a more compact state to clone.
     //
     // We know that a duplex will be performed right after we send the PoW witness, so we can ignore
-    // any output_buffer, which will be invalidated. We also know input_buffer.len() < SPONGE_WIDTH,
-    // an invariant of Challenger.
+    // any output_buffer, which will be invalidated. We also know
+    // input_buffer.len() < H::Permutation::WIDTH, an invariant of Challenger.
     //
     // We separate the duplex operation into two steps, one which can be performed now, and the
     // other which depends on the PoW witness candidate. The first step is the overwrite our sponge
@@ -136,18 +136,15 @@ fn fri_proof_of_work<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, c
     // obtaining our duplex's post-state which contains the PoW response.
     let mut duplex_intermediate_state = challenger.sponge_state;
     let witness_input_pos = challenger.input_buffer.len();
-    for (i, input) in challenger.input_buffer.iter().enumerate() {
-        duplex_intermediate_state[i] = *input;
-    }
+    duplex_intermediate_state.set_from_iter(challenger.input_buffer.clone().into_iter(), 0);
 
     let pow_witness = (0..=F::NEG_ONE.to_canonical_u64())
         .into_par_iter()
         .find_any(|&candidate| {
             let mut duplex_state = duplex_intermediate_state;
-            duplex_state[witness_input_pos] = F::from_canonical_u64(candidate);
-            duplex_state =
-                <<C as GenericConfig<D>>::Hasher as Hasher<F>>::Permutation::permute(duplex_state);
-            let pow_response = duplex_state[SPONGE_RATE - 1];
+            duplex_state.set_elt(F::from_canonical_u64(candidate), witness_input_pos);
+            duplex_state.permute();
+            let pow_response = duplex_state.squeeze().iter().last().unwrap();
             let leading_zeros = pow_response.to_canonical_u64().leading_zeros();
             leading_zeros >= min_leading_zeros
         })

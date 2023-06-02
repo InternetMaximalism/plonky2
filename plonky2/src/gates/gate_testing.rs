@@ -159,5 +159,5 @@ pub fn test_eval_fns<
 
     let data = builder.build::<C>();
     let proof = data.prove(pw)?;
-    verify(proof, &data.verifier_only, &data.common)
+    verify::<F, C, D>(proof, &data.verifier_only, &data.common)
 }

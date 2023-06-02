@@ -1,9 +1,12 @@
 use std::collections::HashMap;
+use std::fs;
+use std::time::Instant;
 
 use ethereum_types::U256;
 use itertools::{izip, Itertools};
 use keccak_hash::keccak;
 use log::debug;
+use serde::{Deserialize, Serialize};
 
 use super::ast::PushTarget;
 use crate::cpu::kernel::ast::Item::LocalLabelDeclaration;
@@ -19,7 +22,7 @@ use crate::generation::prover_input::ProverInputFn;
 /// nontrivial given the circular dependency between an offset and its size.
 pub(crate) const BYTES_PER_OFFSET: u8 = 3;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Kernel {
     pub(crate) code: Vec<u8>,
 
@@ -41,13 +44,14 @@ impl Kernel {
         prover_inputs: HashMap<usize, ProverInputFn>,
     ) -> Self {
         let code_hash_bytes = keccak(&code).0;
-        let code_hash = std::array::from_fn(|i| {
-            u32::from_le_bytes(std::array::from_fn(|j| code_hash_bytes[i * 4 + j]))
+        let code_hash = core::array::from_fn(|i| {
+            u32::from_le_bytes(core::array::from_fn(|j| code_hash_bytes[i * 4 + j]))
         });
         let ordered_labels = global_labels
             .keys()
             .cloned()
             .sorted_by_key(|label| global_labels[label])
+            .inspect(|key| debug!("Global label: {} => {:?}", key, global_labels[key]))
             .collect();
         Self {
             code,
@@ -56,6 +60,16 @@ impl Kernel {
             ordered_labels,
             prover_inputs,
         }
+    }
+
+    pub fn to_file(&self, path: &str) {
+        let kernel_serialized = serde_json::to_string(self).unwrap();
+        fs::write(path, kernel_serialized).expect("Unable to write kernel to file");
+    }
+
+    pub fn from_file(path: &str) -> Self {
+        let bytes = fs::read(path).expect("Unable to read kernel file");
+        serde_json::from_slice(&bytes).unwrap()
     }
 
     /// Get a string representation of the current offset for debugging purposes.
@@ -110,6 +124,7 @@ pub(crate) fn assemble(
     let mut local_labels = Vec::with_capacity(files.len());
     let mut macro_counter = 0;
     for file in files {
+        let start = Instant::now();
         let mut file = file.body;
         file = expand_macros(file, &macros, &mut macro_counter);
         file = inline_constants(file, &constants);
@@ -124,6 +139,7 @@ pub(crate) fn assemble(
             &mut prover_inputs,
         ));
         expanded_files.push(file);
+        debug!("Expanding file took {:?}", start.elapsed());
     }
     let mut code = vec![];
     for (file, locals) in izip!(expanded_files, local_labels) {
@@ -133,6 +149,7 @@ pub(crate) fn assemble(
         debug!("Assembled file size: {} bytes", file_len);
     }
     assert_eq!(code.len(), offset, "Code length doesn't match offset.");
+    debug!("Total kernel size: {} bytes", code.len());
     Kernel::new(code, global_labels, prover_inputs)
 }
 

@@ -1,12 +1,12 @@
 /// The opcode of the `PUSH[n]` instruction, given a byte count `n`.
-pub(crate) fn get_push_opcode(n: u8) -> u8 {
+pub fn get_push_opcode(n: u8) -> u8 {
     assert!(n > 0);
     assert!(n <= 32);
     0x60 + n - 1
 }
 
 /// The opcode of a standard instruction (not a `PUSH`).
-pub(crate) fn get_opcode(mnemonic: &str) -> u8 {
+pub fn get_opcode(mnemonic: &str) -> u8 {
     match mnemonic.to_uppercase().as_str() {
         "STOP" => 0x00,
         "ADD" => 0x01,
@@ -122,7 +122,6 @@ pub(crate) fn get_opcode(mnemonic: &str) -> u8 {
         "CREATE2" => 0xf5,
         "GET_CONTEXT" => 0xf6,
         "SET_CONTEXT" => 0xf7,
-        "CONSUME_GAS" => 0xf8,
         "EXIT_KERNEL" => 0xf9,
         "STATICCALL" => 0xfa,
         "MLOAD_GENERAL" => 0xfb,

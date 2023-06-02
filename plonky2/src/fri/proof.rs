@@ -15,7 +15,7 @@ use crate::hash::merkle_tree::MerkleCap;
 use crate::hash::path_compression::{compress_merkle_proofs, decompress_merkle_proofs};
 use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::target::Target;
-use crate::plonk::config::{GenericConfig, Hasher};
+use crate::plonk::config::Hasher;
 use crate::plonk::plonk_common::salt_size;
 use crate::plonk::proof::{FriInferredElements, ProofChallenges};
 
@@ -27,7 +27,7 @@ pub struct FriQueryStep<F: RichField + Extendable<D>, H: Hasher<F>, const D: usi
     pub merkle_proof: MerkleProof<F, H>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FriQueryStepTarget<const D: usize> {
     pub evals: Vec<ExtensionTarget<D>>,
     pub merkle_proof: MerkleProofTarget,
@@ -52,7 +52,7 @@ impl<F: RichField, H: Hasher<F>> FriInitialTreeProof<F, H> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FriInitialTreeProofTarget {
     pub evals_proofs: Vec<(Vec<Target>, MerkleProofTarget)>,
 }
@@ -81,7 +81,7 @@ pub struct FriQueryRound<F: RichField + Extendable<D>, H: Hasher<F>, const D: us
     pub steps: Vec<FriQueryStep<F, H, D>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FriQueryRoundTarget<const D: usize> {
     pub initial_trees_proof: FriInitialTreeProofTarget,
     pub steps: Vec<FriQueryStepTarget<D>>,
@@ -112,7 +112,7 @@ pub struct FriProof<F: RichField + Extendable<D>, H: Hasher<F>, const D: usize> 
     pub pow_witness: F,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FriProofTarget<const D: usize> {
     pub commit_phase_merkle_caps: Vec<MerkleCapTarget>,
     pub query_round_proofs: Vec<FriQueryRoundTarget<D>>,
@@ -135,11 +135,7 @@ pub struct CompressedFriProof<F: RichField + Extendable<D>, H: Hasher<F>, const 
 
 impl<F: RichField + Extendable<D>, H: Hasher<F>, const D: usize> FriProof<F, H, D> {
     /// Compress all the Merkle paths in the FRI proof and remove duplicate indices.
-    pub fn compress<C: GenericConfig<D, F = F, Hasher = H>>(
-        self,
-        indices: &[usize],
-        params: &FriParams,
-    ) -> CompressedFriProof<F, H, D> {
+    pub fn compress(self, indices: &[usize], params: &FriParams) -> CompressedFriProof<F, H, D> {
         let FriProof {
             commit_phase_merkle_caps,
             query_round_proofs,
@@ -241,7 +237,7 @@ impl<F: RichField + Extendable<D>, H: Hasher<F>, const D: usize> FriProof<F, H, 
 
 impl<F: RichField + Extendable<D>, H: Hasher<F>, const D: usize> CompressedFriProof<F, H, D> {
     /// Decompress all the Merkle paths in the FRI proof and reinsert duplicate indices.
-    pub(crate) fn decompress<C: GenericConfig<D, F = F, Hasher = H>>(
+    pub(crate) fn decompress(
         self,
         challenges: &ProofChallenges<F, D>,
         fri_inferred_elements: FriInferredElements<F, D>,

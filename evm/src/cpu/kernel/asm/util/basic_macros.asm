@@ -50,6 +50,18 @@
     %endrep
 %endmacro
 
+%macro pop9
+    %rep 9
+        POP
+    %endrep
+%endmacro
+
+%macro pop10
+    %rep 10
+        POP
+    %endrep
+%endmacro
+
 %macro and_const(c)
     // stack: input, ...
     PUSH $c
@@ -133,7 +145,7 @@
     PUSH $c
     // stack: c, input, ...
     GT // Check it backwards: (input < c) == (c > input)
-    // stack: input <= c, ...
+    // stack: input < c, ...
 %endmacro
 
 %macro le_const(c)
@@ -158,11 +170,6 @@
     // stack: c, input, ...
     GT ISZERO // Check it backwards: (input >= c) == !(c > input)
     // stack: input >= c, ...
-%endmacro
-
-%macro consume_gas_const(c)
-    PUSH $c
-    CONSUME_GAS
 %endmacro
 
 // If pred is zero, yields z; otherwise, yields nz
@@ -219,8 +226,8 @@
     DUP2
     DUP2
     // stack: x, y, x, y
-    LT
-    // stack: x < y, x, y
+    GT
+    // stack: x > y, x, y
     %select_bool
     // stack: min
 %endmacro
@@ -230,10 +237,57 @@
     DUP2
     DUP2
     // stack: x, y, x, y
-    GT
-    // stack: x > y, x, y
+    LT
+    // stack: x < y, x, y
     %select_bool
     // stack: max
+%endmacro
+
+%macro max_3
+    // stack: x, y, z
+    %max
+    // stack: max(x, y), z
+    SWAP1
+    // stack: z, max(x, y)
+    %max
+    // stack: max(x, y, z)
+%endmacro
+
+%macro max_const(c)
+    // stack: input, ...
+    PUSH $c
+    // stack: c, input, ...
+    %max
+    // stack: max(input, c), ...
+%endmacro
+
+%macro min_const(c)
+    // stack: input, ...
+    PUSH $c
+    // stack: c, input, ...
+    %min
+    // stack: min(input, c), ...
+%endmacro
+
+%macro ceil_div
+    // stack: x, y
+    DUP2
+    // stack: y, x, y
+    %decrement
+    // stack: y - 1, x, y
+    ADD
+    DIV
+    // stack: ceil(x / y)
+%endmacro
+
+%macro ceil_div_const(c)
+    // stack: x, ...
+    PUSH $c
+    // stack: c, x, ...
+    SWAP1
+    // stack: x, c, ...
+    %ceil_div
+    // stack: ceil(x / c), ...
 %endmacro
 
 %macro as_u32
@@ -289,30 +343,30 @@
 
 // given u32 bytestring abcd return dcba
 %macro reverse_bytes_u32
-    // stack: abcd
+    // stack:              abcd
     DUP1
     PUSH 28
     BYTE
-    // stack:                a, abcd
+    // stack:           a, abcd
     DUP2
     PUSH 29
     BYTE
     %shl_const(8)
-    // stack:            b0, a, abcd 
+    // stack:       b0, a, abcd 
     DUP3
     PUSH 30
     BYTE
     %shl_const(16)
-    // stack:       c00, b0, a, abcd
+    // stack:  c00, b0, a, abcd
     SWAP3
     PUSH 31
     BYTE
     %shl_const(24)
-    // stack: d000, b0, a, c00
-    OR 
-    OR
-    OR
-    // stack: dcba
+    // stack:  d000, b0, a, c00
+    ADD // OR
+    ADD // OR
+    ADD // OR
+    // stack:              dcba
 %endmacro
 
 %macro reverse_bytes_u64
@@ -332,7 +386,7 @@
     %reverse_bytes_u32
     // stack: word_lo_inverted, word_hi_inverted
     %shl_const(32)
-    OR
+    ADD // OR
     // stack: word_inverted
 %endmacro
 
@@ -341,7 +395,18 @@
     // stack: a, b, c, d
     %rep 3
         %shl_const(64)
-        OR
+        ADD // OR
     %endrep
     // stack: a || b || c || d
+%endmacro
+
+%macro u256_to_addr
+    // stack: x
+    %mod_const(0x10000000000000000000000000000000000000000) // 2^160
+%endmacro
+
+%macro not_bit
+    // stack: b
+    ISZERO
+    // stack: not b
 %endmacro

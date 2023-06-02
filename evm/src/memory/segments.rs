@@ -1,6 +1,6 @@
 #[allow(dead_code)]
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Debug)]
-pub(crate) enum Segment {
+pub enum Segment {
     /// Contains EVM bytecode.
     Code = 0,
     /// The program stack.
@@ -39,10 +39,29 @@ pub(crate) enum Segment {
     /// instructions; initialised by `kernel/asm/shift.asm::init_shift_table()`.
     ShiftTable = 16,
     JumpdestBits = 17,
+    EcdsaTable = 18,
+    BnWnafA = 19,
+    BnWnafB = 20,
+    BnTableQ = 21,
+    BnPairing = 22,
+    /// List of addresses that have been accessed in the current transaction.
+    AccessedAddresses = 23,
+    /// List of storage keys that have been accessed in the current transaction.
+    AccessedStorageKeys = 24,
+    /// List of addresses that have called SELFDESTRUCT in the current transaction.
+    SelfDestructList = 25,
+    /// Journal of state changes. List of pointers to `JournalData`. Length in `GlobalMetadata`.
+    Journal = 26,
+    JournalData = 27,
+    JournalCheckpoints = 28,
+    /// List of addresses that have been touched in the current transaction.
+    TouchedAddresses = 29,
+    /// List of checkpoints for the current context. Length in `ContextMetadata`.
+    ContextCheckpoints = 30,
 }
 
 impl Segment {
-    pub(crate) const COUNT: usize = 18;
+    pub(crate) const COUNT: usize = 31;
 
     pub(crate) fn all() -> [Self; Self::COUNT] {
         [
@@ -64,6 +83,19 @@ impl Segment {
             Self::TrieEncodedChildLen,
             Self::ShiftTable,
             Self::JumpdestBits,
+            Self::EcdsaTable,
+            Self::BnWnafA,
+            Self::BnWnafB,
+            Self::BnTableQ,
+            Self::BnPairing,
+            Self::AccessedAddresses,
+            Self::AccessedStorageKeys,
+            Self::SelfDestructList,
+            Self::Journal,
+            Self::JournalData,
+            Self::JournalCheckpoints,
+            Self::TouchedAddresses,
+            Self::ContextCheckpoints,
         ]
     }
 
@@ -88,6 +120,19 @@ impl Segment {
             Segment::TrieEncodedChildLen => "SEGMENT_TRIE_ENCODED_CHILD_LEN",
             Segment::ShiftTable => "SEGMENT_SHIFT_TABLE",
             Segment::JumpdestBits => "SEGMENT_JUMPDEST_BITS",
+            Segment::EcdsaTable => "SEGMENT_KERNEL_ECDSA_TABLE",
+            Segment::BnWnafA => "SEGMENT_KERNEL_BN_WNAF_A",
+            Segment::BnWnafB => "SEGMENT_KERNEL_BN_WNAF_B",
+            Segment::BnTableQ => "SEGMENT_KERNEL_BN_TABLE_Q",
+            Segment::BnPairing => "SEGMENT_KERNEL_BN_PAIRING",
+            Segment::AccessedAddresses => "SEGMENT_ACCESSED_ADDRESSES",
+            Segment::AccessedStorageKeys => "SEGMENT_ACCESSED_STORAGE_KEYS",
+            Segment::SelfDestructList => "SEGMENT_SELFDESTRUCT_LIST",
+            Segment::Journal => "SEGMENT_JOURNAL",
+            Segment::JournalData => "SEGMENT_JOURNAL_DATA",
+            Segment::JournalCheckpoints => "SEGMENT_JOURNAL_CHECKPOINTS",
+            Segment::TouchedAddresses => "SEGMENT_TOUCHED_ADDRESSES",
+            Segment::ContextCheckpoints => "SEGMENT_CONTEXT_CHECKPOINTS",
         }
     }
 
@@ -105,13 +150,26 @@ impl Segment {
             Segment::KernelGeneral2 => 256,
             Segment::KernelAccountCode => 8,
             Segment::TxnFields => 256,
-            Segment::TxnData => 256,
+            Segment::TxnData => 8,
             Segment::RlpRaw => 8,
             Segment::TrieData => 256,
             Segment::TrieEncodedChild => 256,
             Segment::TrieEncodedChildLen => 6,
             Segment::ShiftTable => 256,
             Segment::JumpdestBits => 1,
+            Segment::EcdsaTable => 256,
+            Segment::BnWnafA => 8,
+            Segment::BnWnafB => 8,
+            Segment::BnTableQ => 256,
+            Segment::BnPairing => 256,
+            Segment::AccessedAddresses => 256,
+            Segment::AccessedStorageKeys => 256,
+            Segment::SelfDestructList => 256,
+            Segment::Journal => 256,
+            Segment::JournalData => 256,
+            Segment::JournalCheckpoints => 256,
+            Segment::TouchedAddresses => 256,
+            Segment::ContextCheckpoints => 256,
         }
     }
 }

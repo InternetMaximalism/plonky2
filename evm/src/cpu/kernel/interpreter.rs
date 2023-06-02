@@ -1,6 +1,8 @@
 //! An EVM interpreter for testing and debugging purposes.
 
+use core::cmp::Ordering;
 use std::collections::HashMap;
+use std::ops::Range;
 
 use anyhow::{anyhow, bail, ensure};
 use ethereum_types::{U256, U512};
@@ -11,6 +13,7 @@ use crate::cpu::kernel::aggregator::KERNEL;
 use crate::cpu::kernel::constants::context_metadata::ContextMetadata;
 use crate::cpu::kernel::constants::global_metadata::GlobalMetadata;
 use crate::cpu::kernel::constants::txn_fields::NormalizedTxnField;
+use crate::extension_tower::BN_BASE;
 use crate::generation::prover_input::ProverInputFn;
 use crate::generation::state::GenerationState;
 use crate::generation::GenerationInputs;
@@ -24,7 +27,7 @@ type F = GoldilocksField;
 const DEFAULT_HALT_OFFSET: usize = 0xdeadbeef;
 
 impl MemoryState {
-    fn mload_general(&self, context: usize, segment: Segment, offset: usize) -> U256 {
+    pub(crate) fn mload_general(&self, context: usize, segment: Segment, offset: usize) -> U256 {
         self.get(MemoryAddress::new(context, segment, offset))
     }
 
@@ -55,6 +58,33 @@ pub fn run_interpreter(
         initial_stack,
         &KERNEL.prover_inputs,
     )
+}
+
+#[derive(Clone)]
+pub struct InterpreterMemoryInitialization {
+    pub label: String,
+    pub stack: Vec<U256>,
+    pub segment: Segment,
+    pub memory: Vec<(usize, Vec<U256>)>,
+}
+
+pub fn run_interpreter_with_memory(
+    memory_init: InterpreterMemoryInitialization,
+) -> anyhow::Result<Interpreter<'static>> {
+    let label = KERNEL.global_labels[&memory_init.label];
+    let mut stack = memory_init.stack;
+    stack.reverse();
+    let mut interpreter = Interpreter::new_with_kernel(label, stack);
+    for (pointer, data) in memory_init.memory {
+        for (i, term) in data.iter().enumerate() {
+            interpreter.generation_state.memory.set(
+                MemoryAddress::new(0, memory_init.segment, pointer + i),
+                *term,
+            )
+        }
+    }
+    interpreter.run()?;
+    Ok(interpreter)
 }
 
 pub fn run<'a>(
@@ -112,6 +142,7 @@ impl<'a> Interpreter<'a> {
                 println!("{}: {}", get_mnemonic(i as u8), self.opcode_count[i])
             }
         }
+        println!("Total: {}", self.opcode_count.into_iter().sum::<usize>());
         Ok(())
     }
 
@@ -159,6 +190,12 @@ impl<'a> Interpreter<'a> {
         &mut self.generation_state.memory.contexts[0].segments[Segment::TrieData as usize].content
     }
 
+    pub(crate) fn get_memory_segment(&self, segment: Segment) -> Vec<U256> {
+        self.generation_state.memory.contexts[0].segments[segment as usize]
+            .content
+            .clone()
+    }
+
     pub(crate) fn get_memory_segment_bytes(&self, segment: Segment) -> Vec<u8> {
         self.generation_state.memory.contexts[0].segments[segment as usize]
             .content
@@ -167,8 +204,20 @@ impl<'a> Interpreter<'a> {
             .collect()
     }
 
+    pub(crate) fn get_kernel_general_memory(&self) -> Vec<U256> {
+        self.get_memory_segment(Segment::KernelGeneral)
+    }
+
     pub(crate) fn get_rlp_memory(&self) -> Vec<u8> {
         self.get_memory_segment_bytes(Segment::RlpRaw)
+    }
+
+    pub(crate) fn set_memory_segment(&mut self, segment: Segment, memory: Vec<U256>) {
+        self.generation_state.memory.contexts[0].segments[segment as usize].content = memory;
+    }
+
+    pub(crate) fn set_kernel_general_memory(&mut self, memory: Vec<U256>) {
+        self.set_memory_segment(Segment::KernelGeneral, memory)
     }
 
     pub(crate) fn set_memory_segment_bytes(&mut self, segment: Segment, memory: Vec<u8>) {
@@ -214,6 +263,18 @@ impl<'a> Interpreter<'a> {
             .content
     }
 
+    pub fn extract_kernel_memory(self, segment: Segment, range: Range<usize>) -> Vec<U256> {
+        let mut output: Vec<U256> = vec![];
+        for i in range {
+            let term = self
+                .generation_state
+                .memory
+                .get(MemoryAddress::new(0, segment, i));
+            output.push(term);
+        }
+        output
+    }
+
     pub(crate) fn push(&mut self, x: U256) {
         self.stack_mut().push(x);
         self.generation_state.registers.stack_len += 1;
@@ -238,26 +299,27 @@ impl<'a> Interpreter<'a> {
             .byte(0);
         self.opcode_count[opcode as usize] += 1;
         self.incr(1);
+
         match opcode {
             0x00 => self.run_stop(),                                    // "STOP",
             0x01 => self.run_add(),                                     // "ADD",
             0x02 => self.run_mul(),                                     // "MUL",
             0x03 => self.run_sub(),                                     // "SUB",
             0x04 => self.run_div(),                                     // "DIV",
-            0x05 => todo!(),                                            // "SDIV",
+            0x05 => self.run_sdiv(),                                    // "SDIV",
             0x06 => self.run_mod(),                                     // "MOD",
-            0x07 => todo!(),                                            // "SMOD",
+            0x07 => self.run_smod(),                                    // "SMOD",
             0x08 => self.run_addmod(),                                  // "ADDMOD",
             0x09 => self.run_mulmod(),                                  // "MULMOD",
             0x0a => self.run_exp(),                                     // "EXP",
-            0x0b => todo!(),                                            // "SIGNEXTEND",
+            0x0b => self.run_signextend(),                              // "SIGNEXTEND",
             0x0c => self.run_addfp254(),                                // "ADDFP254",
             0x0d => self.run_mulfp254(),                                // "MULFP254",
             0x0e => self.run_subfp254(),                                // "SUBFP254",
             0x10 => self.run_lt(),                                      // "LT",
             0x11 => self.run_gt(),                                      // "GT",
-            0x12 => todo!(),                                            // "SLT",
-            0x13 => todo!(),                                            // "SGT",
+            0x12 => self.run_slt(),                                     // "SLT",
+            0x13 => self.run_sgt(),                                     // "SGT",
             0x14 => self.run_eq(),                                      // "EQ",
             0x15 => self.run_iszero(),                                  // "ISZERO",
             0x16 => self.run_and(),                                     // "AND",
@@ -267,33 +329,33 @@ impl<'a> Interpreter<'a> {
             0x1a => self.run_byte(),                                    // "BYTE",
             0x1b => self.run_shl(),                                     // "SHL",
             0x1c => self.run_shr(),                                     // "SHR",
-            0x1d => todo!(),                                            // "SAR",
+            0x1d => self.run_sar(),                                     // "SAR",
             0x20 => self.run_keccak256(),                               // "KECCAK256",
             0x21 => self.run_keccak_general(),                          // "KECCAK_GENERAL",
-            0x30 => todo!(),                                            // "ADDRESS",
+            0x30 => self.run_address(),                                 // "ADDRESS",
             0x31 => todo!(),                                            // "BALANCE",
-            0x32 => todo!(),                                            // "ORIGIN",
-            0x33 => todo!(),                                            // "CALLER",
+            0x32 => self.run_origin(),                                  // "ORIGIN",
+            0x33 => self.run_caller(),                                  // "CALLER",
             0x34 => self.run_callvalue(),                               // "CALLVALUE",
             0x35 => self.run_calldataload(),                            // "CALLDATALOAD",
             0x36 => self.run_calldatasize(),                            // "CALLDATASIZE",
             0x37 => self.run_calldatacopy(),                            // "CALLDATACOPY",
-            0x38 => todo!(),                                            // "CODESIZE",
-            0x39 => todo!(),                                            // "CODECOPY",
-            0x3a => todo!(),                                            // "GASPRICE",
+            0x38 => self.run_codesize(),                                // "CODESIZE",
+            0x39 => self.run_codecopy(),                                // "CODECOPY",
+            0x3a => self.run_gasprice(),                                // "GASPRICE",
             0x3b => todo!(),                                            // "EXTCODESIZE",
             0x3c => todo!(),                                            // "EXTCODECOPY",
-            0x3d => todo!(),                                            // "RETURNDATASIZE",
-            0x3e => todo!(),                                            // "RETURNDATACOPY",
+            0x3d => self.run_returndatasize(),                          // "RETURNDATASIZE",
+            0x3e => self.run_returndatacopy(),                          // "RETURNDATACOPY",
             0x3f => todo!(),                                            // "EXTCODEHASH",
             0x40 => todo!(),                                            // "BLOCKHASH",
-            0x41 => todo!(),                                            // "COINBASE",
-            0x42 => todo!(),                                            // "TIMESTAMP",
-            0x43 => todo!(),                                            // "NUMBER",
-            0x44 => todo!(),                                            // "DIFFICULTY",
-            0x45 => todo!(),                                            // "GASLIMIT",
-            0x46 => todo!(),                                            // "CHAINID",
-            0x48 => todo!(),                                            // "BASEFEE",
+            0x41 => self.run_coinbase(),                                // "COINBASE",
+            0x42 => self.run_timestamp(),                               // "TIMESTAMP",
+            0x43 => self.run_number(),                                  // "NUMBER",
+            0x44 => self.run_difficulty(),                              // "DIFFICULTY",
+            0x45 => self.run_gaslimit(),                                // "GASLIMIT",
+            0x46 => self.run_chainid(),                                 // "CHAINID",
+            0x48 => self.run_basefee(),                                 // "BASEFEE",
             0x49 => self.run_prover_input()?,                           // "PROVER_INPUT",
             0x50 => self.run_pop(),                                     // "POP",
             0x51 => self.run_mload(),                                   // "MLOAD",
@@ -315,7 +377,11 @@ impl<'a> Interpreter<'a> {
             0xa2 => todo!(),                                            // "LOG2",
             0xa3 => todo!(),                                            // "LOG3",
             0xa4 => todo!(),                                            // "LOG4",
-            0xa5 => bail!("Executed PANIC"),                            // "PANIC",
+            0xa5 => bail!(
+                "Executed PANIC, stack={:?}, memory={:?}",
+                self.stack(),
+                self.get_kernel_general_memory()
+            ), // "PANIC",
             0xf0 => todo!(),                                            // "CREATE",
             0xf1 => todo!(),                                            // "CALL",
             0xf2 => todo!(),                                            // "CALLCODE",
@@ -324,7 +390,6 @@ impl<'a> Interpreter<'a> {
             0xf5 => todo!(),                                            // "CREATE2",
             0xf6 => self.run_get_context(),                             // "GET_CONTEXT",
             0xf7 => self.run_set_context(),                             // "SET_CONTEXT",
-            0xf8 => todo!(),                                            // "CONSUME_GAS",
             0xf9 => todo!(),                                            // "EXIT_KERNEL",
             0xfa => todo!(),                                            // "STATICCALL",
             0xfb => self.run_mload_general(),                           // "MLOAD_GENERAL",
@@ -377,25 +442,24 @@ impl<'a> Interpreter<'a> {
         self.push(x.overflowing_sub(y).0);
     }
 
-    // TODO: 107 is hardcoded as a dummy prime for testing
-    // should be changed to the proper implementation prime
-
     fn run_addfp254(&mut self) {
-        let x = self.pop();
-        let y = self.pop();
-        self.push((x + y) % 107);
+        let x = self.pop() % BN_BASE;
+        let y = self.pop() % BN_BASE;
+        // BN_BASE is 254-bit so addition can't overflow
+        self.push((x + y) % BN_BASE);
     }
 
     fn run_mulfp254(&mut self) {
         let x = self.pop();
         let y = self.pop();
-        self.push(U256::try_from(x.full_mul(y) % 107).unwrap());
+        self.push(U256::try_from(x.full_mul(y) % BN_BASE).unwrap());
     }
 
     fn run_subfp254(&mut self) {
-        let x = self.pop();
-        let y = self.pop();
-        self.push((U256::from(107) + x - y) % 107);
+        let x = self.pop() % BN_BASE;
+        let y = self.pop() % BN_BASE;
+        // BN_BASE is 254-bit so addition can't overflow
+        self.push((x + (BN_BASE - y)) % BN_BASE);
     }
 
     fn run_div(&mut self) {
@@ -404,10 +468,73 @@ impl<'a> Interpreter<'a> {
         self.push(if y.is_zero() { U256::zero() } else { x / y });
     }
 
+    fn run_sdiv(&mut self) {
+        let mut x = self.pop();
+        let mut y = self.pop();
+
+        let y_is_zero = y.is_zero();
+
+        if y_is_zero {
+            self.push(U256::zero());
+        } else if y.eq(&MINUS_ONE) && x.eq(&MIN_VALUE) {
+            self.push(MIN_VALUE);
+        } else {
+            let x_is_pos = x.eq(&(x & SIGN_MASK));
+            let y_is_pos = y.eq(&(y & SIGN_MASK));
+
+            // We compute the absolute quotient first,
+            // then adapt its sign based on the operands.
+            if !x_is_pos {
+                x = two_complement(x);
+            }
+            if !y_is_pos {
+                y = two_complement(y);
+            }
+            let div = x / y;
+            if div.eq(&U256::zero()) {
+                self.push(U256::zero());
+            }
+
+            self.push(if x_is_pos == y_is_pos {
+                div
+            } else {
+                two_complement(div)
+            });
+        }
+    }
+
     fn run_mod(&mut self) {
         let x = self.pop();
         let y = self.pop();
         self.push(if y.is_zero() { U256::zero() } else { x % y });
+    }
+
+    fn run_smod(&mut self) {
+        let mut x = self.pop();
+        let mut y = self.pop();
+
+        if y.is_zero() {
+            self.push(U256::zero());
+        } else {
+            let x_is_pos = x.eq(&(x & SIGN_MASK));
+            let y_is_pos = y.eq(&(y & SIGN_MASK));
+
+            // We compute the absolute remainder first,
+            // then adapt its sign based on the operands.
+            if !x_is_pos {
+                x = two_complement(x);
+            }
+            if !y_is_pos {
+                y = two_complement(y);
+            }
+            let rem = x % y;
+            if rem.eq(&U256::zero()) {
+                self.push(U256::zero());
+            }
+
+            // Remainder always has the same sign as the dividend.
+            self.push(if x_is_pos { rem } else { two_complement(rem) });
+        }
     }
 
     fn run_addmod(&mut self) {
@@ -448,6 +575,43 @@ impl<'a> Interpreter<'a> {
         let x = self.pop();
         let y = self.pop();
         self.push_bool(x > y);
+    }
+
+    fn run_slt(&mut self) {
+        let x = self.pop();
+        let y = self.pop();
+        self.push_bool(signed_cmp(x, y) == Ordering::Less);
+    }
+
+    fn run_sgt(&mut self) {
+        let x = self.pop();
+        let y = self.pop();
+        self.push_bool(signed_cmp(x, y) == Ordering::Greater);
+    }
+
+    fn run_signextend(&mut self) {
+        let n = self.pop();
+        let x = self.pop();
+        if n > U256::from(31) {
+            self.push(x);
+        } else {
+            let n = n.low_u64() as usize;
+            let num_bytes_prepend = 31 - n;
+
+            let mut x_bytes = [0u8; 32];
+            x.to_big_endian(&mut x_bytes);
+            let x_bytes = x_bytes[num_bytes_prepend..].to_vec();
+            let sign_bit = x_bytes[0] >> 7;
+
+            let mut bytes = if sign_bit == 0 {
+                vec![0; num_bytes_prepend]
+            } else {
+                vec![0xff; num_bytes_prepend]
+            };
+            bytes.extend_from_slice(&x_bytes);
+
+            self.push(U256::from_big_endian(&bytes));
+        }
     }
 
     fn run_eq(&mut self) {
@@ -498,13 +662,41 @@ impl<'a> Interpreter<'a> {
     fn run_shl(&mut self) {
         let shift = self.pop();
         let value = self.pop();
-        self.push(value << shift);
+        self.push(if shift < U256::from(256usize) {
+            value << shift
+        } else {
+            U256::zero()
+        });
     }
 
     fn run_shr(&mut self) {
         let shift = self.pop();
         let value = self.pop();
         self.push(value >> shift);
+    }
+
+    fn run_sar(&mut self) {
+        let shift = self.pop();
+        let value = self.pop();
+        let value_is_neg = !value.eq(&(value & SIGN_MASK));
+
+        if shift < U256::from(256usize) {
+            let shift = shift.low_u64() as usize;
+            let mask = !(MINUS_ONE >> shift);
+            let value_shifted = value >> shift;
+
+            if value_is_neg {
+                self.push(value_shifted | mask);
+            } else {
+                self.push(value_shifted);
+            };
+        } else {
+            self.push(if value_is_neg {
+                MINUS_ONE
+            } else {
+                U256::zero()
+            });
+        }
     }
 
     fn run_keccak256(&mut self) {
@@ -540,6 +732,26 @@ impl<'a> Interpreter<'a> {
         println!("Hashing {:?}", &bytes);
         let hash = keccak(bytes);
         self.push(U256::from_big_endian(hash.as_bytes()));
+    }
+
+    fn run_address(&mut self) {
+        self.push(
+            self.generation_state.memory.contexts[self.context].segments
+                [Segment::ContextMetadata as usize]
+                .get(ContextMetadata::Address as usize),
+        )
+    }
+
+    fn run_origin(&mut self) {
+        self.push(self.get_txn_field(NormalizedTxnField::Origin))
+    }
+
+    fn run_caller(&mut self) {
+        self.push(
+            self.generation_state.memory.contexts[self.context].segments
+                [Segment::ContextMetadata as usize]
+                .get(ContextMetadata::Caller as usize),
+        )
     }
 
     fn run_callvalue(&mut self) {
@@ -590,6 +802,91 @@ impl<'a> Interpreter<'a> {
                 calldata_byte,
             );
         }
+    }
+
+    fn run_codesize(&mut self) {
+        self.push(
+            self.generation_state.memory.contexts[self.context].segments
+                [Segment::ContextMetadata as usize]
+                .get(ContextMetadata::CodeSize as usize),
+        )
+    }
+
+    fn run_codecopy(&mut self) {
+        let dest_offset = self.pop().as_usize();
+        let offset = self.pop().as_usize();
+        let size = self.pop().as_usize();
+        for i in 0..size {
+            let code_byte =
+                self.generation_state
+                    .memory
+                    .mload_general(self.context, Segment::Code, offset + i);
+            self.generation_state.memory.mstore_general(
+                self.context,
+                Segment::MainMemory,
+                dest_offset + i,
+                code_byte,
+            );
+        }
+    }
+
+    fn run_gasprice(&mut self) {
+        self.push(self.get_txn_field(NormalizedTxnField::ComputedFeePerGas))
+    }
+
+    fn run_returndatasize(&mut self) {
+        self.push(
+            self.generation_state.memory.contexts[self.context].segments
+                [Segment::ContextMetadata as usize]
+                .get(ContextMetadata::ReturndataSize as usize),
+        )
+    }
+
+    fn run_returndatacopy(&mut self) {
+        let dest_offset = self.pop().as_usize();
+        let offset = self.pop().as_usize();
+        let size = self.pop().as_usize();
+        for i in 0..size {
+            let returndata_byte = self.generation_state.memory.mload_general(
+                self.context,
+                Segment::Returndata,
+                offset + i,
+            );
+            self.generation_state.memory.mstore_general(
+                self.context,
+                Segment::MainMemory,
+                dest_offset + i,
+                returndata_byte,
+            );
+        }
+    }
+
+    fn run_coinbase(&mut self) {
+        self.push(self.get_global_metadata_field(GlobalMetadata::BlockBeneficiary))
+    }
+
+    fn run_timestamp(&mut self) {
+        self.push(self.get_global_metadata_field(GlobalMetadata::BlockTimestamp))
+    }
+
+    fn run_number(&mut self) {
+        self.push(self.get_global_metadata_field(GlobalMetadata::BlockNumber))
+    }
+
+    fn run_difficulty(&mut self) {
+        self.push(self.get_global_metadata_field(GlobalMetadata::BlockDifficulty))
+    }
+
+    fn run_gaslimit(&mut self) {
+        self.push(self.get_global_metadata_field(GlobalMetadata::BlockGasLimit))
+    }
+
+    fn run_basefee(&mut self) {
+        self.push(self.get_global_metadata_field(GlobalMetadata::BlockBaseFee))
+    }
+
+    fn run_chainid(&mut self) {
+        self.push(self.get_global_metadata_field(GlobalMetadata::BlockChainId))
     }
 
     fn run_prover_input(&mut self) -> anyhow::Result<()> {
@@ -668,7 +965,7 @@ impl<'a> Interpreter<'a> {
         self.push(
             self.generation_state.memory.contexts[self.context].segments
                 [Segment::ContextMetadata as usize]
-                .get(ContextMetadata::MSize as usize),
+                .get(ContextMetadata::MemWords as usize),
         )
     }
 
@@ -741,6 +1038,70 @@ impl<'a> Interpreter<'a> {
         self.generation_state.registers.stack_len
     }
 }
+
+// Computes the two's complement of the given integer.
+fn two_complement(x: U256) -> U256 {
+    let flipped_bits = x ^ MINUS_ONE;
+    flipped_bits.overflowing_add(U256::one()).0
+}
+
+fn signed_cmp(x: U256, y: U256) -> Ordering {
+    let x_is_zero = x.is_zero();
+    let y_is_zero = y.is_zero();
+
+    if x_is_zero && y_is_zero {
+        return Ordering::Equal;
+    }
+
+    let x_is_pos = x.eq(&(x & SIGN_MASK));
+    let y_is_pos = y.eq(&(y & SIGN_MASK));
+
+    if x_is_zero {
+        if y_is_pos {
+            return Ordering::Less;
+        } else {
+            return Ordering::Greater;
+        }
+    };
+
+    if y_is_zero {
+        if x_is_pos {
+            return Ordering::Greater;
+        } else {
+            return Ordering::Less;
+        }
+    };
+
+    match (x_is_pos, y_is_pos) {
+        (true, true) => x.cmp(&y),
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+        (false, false) => x.cmp(&y).reverse(),
+    }
+}
+
+/// -1 in two's complement representation consists in all bits set to 1.
+const MINUS_ONE: U256 = U256([
+    0xffffffffffffffff,
+    0xffffffffffffffff,
+    0xffffffffffffffff,
+    0xffffffffffffffff,
+]);
+
+/// -2^255 in two's complement representation consists in the MSB set to 1.
+const MIN_VALUE: U256 = U256([
+    0x0000000000000000,
+    0x0000000000000000,
+    0x0000000000000000,
+    0x8000000000000000,
+]);
+
+const SIGN_MASK: U256 = U256([
+    0xffffffffffffffff,
+    0xffffffffffffffff,
+    0xffffffffffffffff,
+    0x7fffffffffffffff,
+]);
 
 /// Return the (ordered) JUMPDEST offsets in the code.
 fn find_jumpdests(code: &[u8]) -> Vec<usize> {
@@ -906,7 +1267,6 @@ fn get_mnemonic(opcode: u8) -> &'static str {
         0xf5 => "CREATE2",
         0xf6 => "GET_CONTEXT",
         0xf7 => "SET_CONTEXT",
-        0xf8 => "CONSUME_GAS",
         0xf9 => "EXIT_KERNEL",
         0xfa => "STATICCALL",
         0xfb => "MLOAD_GENERAL",

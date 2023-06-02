@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 
 use crate::field::extension::{Extendable, FieldExtension};
 use crate::hash::hash_types::{HashOut, HashOutTarget, MerkleCapTarget, RichField};
-use crate::hash::hashing::{PlonkyPermutation, SPONGE_RATE, SPONGE_WIDTH};
+use crate::hash::hashing::PlonkyPermutation;
 use crate::hash::merkle_tree::MerkleCap;
 use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::target::Target;
@@ -14,10 +14,9 @@ use crate::plonk::config::{AlgebraicHasher, GenericHashOut, Hasher};
 /// Observes prover messages, and generates challenges by hashing the transcript, a la Fiat-Shamir.
 #[derive(Clone)]
 pub struct Challenger<F: RichField, H: Hasher<F>> {
-    pub(crate) sponge_state: [F; SPONGE_WIDTH],
+    pub(crate) sponge_state: H::Permutation,
     pub(crate) input_buffer: Vec<F>,
     output_buffer: Vec<F>,
-    _phantom: PhantomData<H>,
 }
 
 /// Observes prover messages, and generates verifier challenges based on the transcript.
@@ -31,10 +30,9 @@ pub struct Challenger<F: RichField, H: Hasher<F>> {
 impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
     pub fn new() -> Challenger<F, H> {
         Challenger {
-            sponge_state: [F::ZERO; SPONGE_WIDTH],
-            input_buffer: Vec::with_capacity(SPONGE_RATE),
-            output_buffer: Vec::with_capacity(SPONGE_RATE),
-            _phantom: Default::default(),
+            sponge_state: H::Permutation::new(std::iter::repeat(F::ZERO)),
+            input_buffer: Vec::with_capacity(H::Permutation::RATE),
+            output_buffer: Vec::with_capacity(H::Permutation::RATE),
         }
     }
 
@@ -44,7 +42,7 @@ impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
 
         self.input_buffer.push(element);
 
-        if self.input_buffer.len() == SPONGE_RATE {
+        if self.input_buffer.len() == H::Permutation::RATE {
             self.duplexing();
         }
     }
@@ -129,24 +127,23 @@ impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
     /// Absorb any buffered inputs. After calling this, the input buffer will be empty, and the
     /// output buffer will be full.
     fn duplexing(&mut self) {
-        assert!(self.input_buffer.len() <= SPONGE_RATE);
+        assert!(self.input_buffer.len() <= H::Permutation::RATE);
 
         // Overwrite the first r elements with the inputs. This differs from a standard sponge,
         // where we would xor or add in the inputs. This is a well-known variant, though,
         // sometimes called "overwrite mode".
-        for (i, input) in self.input_buffer.drain(..).enumerate() {
-            self.sponge_state[i] = input;
-        }
+        self.sponge_state
+            .set_from_iter(self.input_buffer.drain(..), 0);
 
         // Apply the permutation.
-        self.sponge_state = H::Permutation::permute(self.sponge_state);
+        self.sponge_state.permute();
 
         self.output_buffer.clear();
         self.output_buffer
-            .extend_from_slice(&self.sponge_state[0..SPONGE_RATE]);
+            .extend_from_slice(self.sponge_state.squeeze());
     }
 
-    pub fn compact(&mut self) -> [F; SPONGE_WIDTH] {
+    pub fn compact(&mut self) -> H::Permutation {
         if !self.input_buffer.is_empty() {
             self.duplexing();
         }
@@ -162,11 +159,11 @@ impl<F: RichField, H: AlgebraicHasher<F>> Default for Challenger<F, H> {
 }
 
 /// A recursive version of `Challenger`. The main difference is that `RecursiveChallenger`'s input
-/// buffer can grow beyond `SPONGE_RATE`. This is so that `observe_element` etc do not need access
+/// buffer can grow beyond `H::Permutation::RATE`. This is so that `observe_element` etc do not need access
 /// to the `CircuitBuilder`.
 pub struct RecursiveChallenger<F: RichField + Extendable<D>, H: AlgebraicHasher<F>, const D: usize>
 {
-    sponge_state: [Target; SPONGE_WIDTH],
+    sponge_state: H::AlgebraicPermutation,
     input_buffer: Vec<Target>,
     output_buffer: Vec<Target>,
     __: PhantomData<(F, H)>,
@@ -178,14 +175,14 @@ impl<F: RichField + Extendable<D>, H: AlgebraicHasher<F>, const D: usize>
     pub fn new(builder: &mut CircuitBuilder<F, D>) -> Self {
         let zero = builder.zero();
         Self {
-            sponge_state: [zero; SPONGE_WIDTH],
+            sponge_state: H::AlgebraicPermutation::new(std::iter::repeat(zero)),
             input_buffer: Vec::new(),
             output_buffer: Vec::new(),
             __: PhantomData,
         }
     }
 
-    pub fn from_state(sponge_state: [Target; SPONGE_WIDTH]) -> Self {
+    pub fn from_state(sponge_state: H::AlgebraicPermutation) -> Self {
         Self {
             sponge_state,
             input_buffer: vec![],
@@ -233,7 +230,7 @@ impl<F: RichField + Extendable<D>, H: AlgebraicHasher<F>, const D: usize>
         if self.output_buffer.is_empty() {
             // Evaluate the permutation to produce `r` new outputs.
             self.sponge_state = builder.permute::<H>(self.sponge_state);
-            self.output_buffer = self.sponge_state[0..SPONGE_RATE].to_vec();
+            self.output_buffer = self.sponge_state.squeeze().to_vec();
         }
 
         self.output_buffer
@@ -274,24 +271,20 @@ impl<F: RichField + Extendable<D>, H: AlgebraicHasher<F>, const D: usize>
             return;
         }
 
-        for input_chunk in self.input_buffer.chunks(SPONGE_RATE) {
+        for input_chunk in self.input_buffer.chunks(H::AlgebraicPermutation::RATE) {
             // Overwrite the first r elements with the inputs. This differs from a standard sponge,
             // where we would xor or add in the inputs. This is a well-known variant, though,
             // sometimes called "overwrite mode".
-            for (i, &input) in input_chunk.iter().enumerate() {
-                self.sponge_state[i] = input;
-            }
-
-            // Apply the permutation.
+            self.sponge_state.set_from_slice(input_chunk, 0);
             self.sponge_state = builder.permute::<H>(self.sponge_state);
         }
 
-        self.output_buffer = self.sponge_state[0..SPONGE_RATE].to_vec();
+        self.output_buffer = self.sponge_state.squeeze().to_vec();
 
         self.input_buffer.clear();
     }
 
-    pub fn compact(&mut self, builder: &mut CircuitBuilder<F, D>) -> [Target; SPONGE_WIDTH] {
+    pub fn compact(&mut self, builder: &mut CircuitBuilder<F, D>) -> H::AlgebraicPermutation {
         self.absorb_buffered_inputs(builder);
         self.output_buffer.clear();
         self.sponge_state

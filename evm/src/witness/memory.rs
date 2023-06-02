@@ -10,7 +10,11 @@ pub enum MemoryChannel {
 
 use MemoryChannel::{Code, GeneralPurpose};
 
+use crate::cpu::kernel::constants::global_metadata::GlobalMetadata;
 use crate::memory::segments::Segment;
+use crate::witness::errors::MemoryError::{ContextTooLarge, SegmentTooLarge, VirtTooLarge};
+use crate::witness::errors::ProgramError;
+use crate::witness::errors::ProgramError::MemoryError;
 
 impl MemoryChannel {
     pub fn index(&self) -> usize {
@@ -40,19 +44,25 @@ impl MemoryAddress {
         }
     }
 
-    pub(crate) fn new_u256s(context: U256, segment: U256, virt: U256) -> Self {
-        assert!(context.bits() <= 32, "context too large: {}", context);
-        assert!(
-            segment < Segment::COUNT.into(),
-            "segment too large: {}",
-            segment
-        );
-        assert!(virt.bits() <= 32, "virt too large: {}", virt);
-        Self {
+    pub(crate) fn new_u256s(
+        context: U256,
+        segment: U256,
+        virt: U256,
+    ) -> Result<Self, ProgramError> {
+        if context.bits() > 32 {
+            return Err(MemoryError(ContextTooLarge { context }));
+        }
+        if segment >= Segment::COUNT.into() {
+            return Err(MemoryError(SegmentTooLarge { segment }));
+        }
+        if virt.bits() > 32 {
+            return Err(MemoryError(VirtTooLarge { virt }));
+        }
+        Ok(Self {
             context: context.as_usize(),
             segment: segment.as_usize(),
             virt: virt.as_usize(),
-        }
+        })
     }
 
     pub(crate) fn increment(&mut self) {
@@ -94,13 +104,13 @@ impl MemoryOp {
         }
     }
 
-    pub(crate) fn new_dummy_read(address: MemoryAddress, timestamp: usize) -> Self {
+    pub(crate) fn new_dummy_read(address: MemoryAddress, timestamp: usize, value: U256) -> Self {
         Self {
             filter: false,
             timestamp,
             address,
             kind: MemoryOpKind::Read,
-            value: U256::zero(),
+            value,
         }
     }
 
@@ -142,6 +152,10 @@ impl MemoryState {
     }
 
     pub fn get(&self, address: MemoryAddress) -> U256 {
+        if address.context >= self.contexts.len() {
+            return U256::zero();
+        }
+
         let segment = Segment::all()[address.segment];
         let val = self.contexts[address.context].segments[address.segment].get(address.virt);
         assert!(
@@ -155,6 +169,10 @@ impl MemoryState {
     }
 
     pub fn set(&mut self, address: MemoryAddress, val: U256) {
+        while address.context >= self.contexts.len() {
+            self.contexts.push(MemoryContextState::default());
+        }
+
         let segment = Segment::all()[address.segment];
         assert!(
             val.bits() <= segment.bit_range(),
@@ -164,6 +182,14 @@ impl MemoryState {
             segment.bit_range()
         );
         self.contexts[address.context].segments[address.segment].set(address.virt, val);
+    }
+
+    pub(crate) fn read_global_metadata(&self, field: GlobalMetadata) -> U256 {
+        self.get(MemoryAddress::new(
+            0,
+            Segment::GlobalMetadata,
+            field as usize,
+        ))
     }
 }
 

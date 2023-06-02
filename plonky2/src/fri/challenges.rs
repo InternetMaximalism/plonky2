@@ -41,7 +41,7 @@ impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
         let fri_betas = commit_phase_merkle_caps
             .iter()
             .map(|cap| {
-                self.observe_cap(cap);
+                self.observe_cap::<C::Hasher>(cap);
                 self.get_extension_challenge::<D>()
             })
             .collect();
@@ -73,7 +73,7 @@ impl<F: RichField + Extendable<D>, H: AlgebraicHasher<F>, const D: usize>
         }
     }
 
-    pub fn fri_challenges<C: GenericConfig<D, F = F>>(
+    pub fn fri_challenges(
         &mut self,
         builder: &mut CircuitBuilder<F, D>,
         commit_phase_merkle_caps: &[MerkleCapTarget],

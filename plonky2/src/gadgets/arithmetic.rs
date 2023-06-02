@@ -11,6 +11,7 @@ use crate::iop::generator::{GeneratedValues, SimpleGenerator};
 use crate::iop::target::{BoolTarget, Target};
 use crate::iop::witness::{PartitionWitness, Witness, WitnessWrite};
 use crate::plonk::circuit_builder::CircuitBuilder;
+use crate::util::serialization::{Buffer, IoResult, Read, Write};
 
 impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     /// Computes `-x`.
@@ -337,6 +338,12 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         BoolTarget::new_unsafe(self.mul(b1.target, b2.target))
     }
 
+    /// computes the arithmetic extension of logical "or": `b1 + b2 - b1 * b2`
+    pub fn or(&mut self, b1: BoolTarget, b2: BoolTarget) -> BoolTarget {
+        let res_minus_b2 = self.arithmetic(-F::ONE, F::ONE, b1.target, b2.target, b1.target);
+        BoolTarget::new_unsafe(self.add(res_minus_b2, b2.target))
+    }
+
     pub fn _if(&mut self, b: BoolTarget, x: Target, y: Target) -> Target {
         let not_b = self.not(b);
         let maybe_x = self.mul(b.target, x);
@@ -364,8 +371,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 }
 
-#[derive(Debug)]
-struct EqualityGenerator {
+#[derive(Debug, Default)]
+pub struct EqualityGenerator {
     x: Target,
     y: Target,
     equal: BoolTarget,
@@ -373,6 +380,10 @@ struct EqualityGenerator {
 }
 
 impl<F: RichField> SimpleGenerator<F> for EqualityGenerator {
+    fn id(&self) -> String {
+        "EqualityGenerator".to_string()
+    }
+
     fn dependencies(&self) -> Vec<Target> {
         vec![self.x, self.y]
     }
@@ -385,6 +396,21 @@ impl<F: RichField> SimpleGenerator<F> for EqualityGenerator {
 
         out_buffer.set_bool_target(self.equal, x == y);
         out_buffer.set_target(self.inv, inv);
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> IoResult<()> {
+        dst.write_target(self.x)?;
+        dst.write_target(self.y)?;
+        dst.write_target_bool(self.equal)?;
+        dst.write_target(self.inv)
+    }
+
+    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
+        let x = src.read_target()?;
+        let y = src.read_target()?;
+        let equal = src.read_target_bool()?;
+        let inv = src.read_target()?;
+        Ok(Self { x, y, equal, inv })
     }
 }
 

@@ -1,5 +1,4 @@
-use alloc::boxed::Box;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::marker::PhantomData;
@@ -11,14 +10,14 @@ use crate::field::types::Field;
 use crate::gates::gate::Gate;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
-use crate::hash::hashing::SPONGE_WIDTH;
-use crate::hash::poseidon::Poseidon;
+use crate::hash::poseidon::{Poseidon, SPONGE_WIDTH};
 use crate::iop::ext_target::{ExtensionAlgebraTarget, ExtensionTarget};
-use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator};
+use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGeneratorRef};
 use crate::iop::target::Target;
 use crate::iop::witness::{PartitionWitness, Witness, WitnessWrite};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
+use crate::util::serialization::{Buffer, IoResult, Read, Write};
 
 /// Poseidon MDS Gate
 #[derive(Debug, Default)]
@@ -119,50 +118,12 @@ impl<F: RichField + Extendable<D> + Poseidon, const D: usize> Gate<F, D> for Pos
         format!("{self:?}<WIDTH={SPONGE_WIDTH}>")
     }
 
-    fn export_circom_verification_code(&self) -> String {
-        assert_eq!(D, 2);
-        assert_eq!(SPONGE_WIDTH, 12);
-        let template_str = format!(
-            "template PoseidonMdsGate12() {{
-  signal input constants[NUM_OPENINGS_CONSTANTS()][2];
-  signal input wires[NUM_OPENINGS_WIRES()][2];
-  signal input public_input_hash[4];
-  signal input constraints[NUM_GATE_CONSTRAINTS()][2];
-  signal output out[NUM_GATE_CONSTRAINTS()][2];
-
-  signal filter[2];
-  $SET_FILTER;
-
-  signal state[13][12][2][2];
-  for (var r = 0; r < 12; r++) {{
-    for (var i = 0; i < 12; i++) {{
-      var j = i + r >= 12 ? i + r - 12 : i + r;
-      if (i == 0) {{
-        state[i][r][0] <== GlExtScalarMul()(wires[j * 2], MDS_MATRIX_CIRC(i));
-        state[i][r][1] <== GlExtScalarMul()(wires[j * 2 + 1], MDS_MATRIX_CIRC(i));
-      }} else {{
-        state[i][r][0] <== GlExtAdd()(state[i - 1][r][0], GlExtScalarMul()(wires[j * 2], MDS_MATRIX_CIRC(i)));
-        state[i][r][1] <== GlExtAdd()(state[i - 1][r][1], GlExtScalarMul()(wires[j * 2 + 1], MDS_MATRIX_CIRC(i)));
-      }}
-    }}
-    state[12][r][0] <== GlExtAdd()(state[11][r][0], GlExtScalarMul()(wires[r * 2], MDS_MATRIX_DIAG(r)));
-    state[12][r][1] <== GlExtAdd()(state[11][r][1], GlExtScalarMul()(wires[r * 2 + 1], MDS_MATRIX_DIAG(r)));
-  }}
-
-  for (var r = 0; r < 12; r ++) {{
-    out[r * 2] <== ConstraintPush()(constraints[r * 2], filter, GlExtSub()(wires[(12 + r) * 2], state[12][r][0]));
-    out[r * 2 + 1] <== ConstraintPush()(constraints[r * 2 + 1], filter, GlExtSub()(wires[(12 + r) * 2 + 1], state[12][r][1]));
-  }}
-
-  for (var i = 24; i < NUM_GATE_CONSTRAINTS(); i++) {{
-    out[i] <== constraints[i];
-  }}
-}}"
-        ).to_string();
-        template_str
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
+        Ok(())
     }
-    fn export_solidity_verification_code(&self) -> String {
-        todo!()
+
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self> {
+        Ok(PoseidonMdsGate::new())
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
@@ -226,9 +187,9 @@ impl<F: RichField + Extendable<D> + Poseidon, const D: usize> Gate<F, D> for Pos
             .collect()
     }
 
-    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<Box<dyn WitnessGenerator<F>>> {
+    fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<WitnessGeneratorRef<F>> {
         let gen = PoseidonMdsGenerator::<D> { row };
-        vec![Box::new(gen.adapter())]
+        vec![WitnessGeneratorRef::new(gen.adapter())]
     }
 
     fn num_wires(&self) -> usize {
@@ -248,14 +209,18 @@ impl<F: RichField + Extendable<D> + Poseidon, const D: usize> Gate<F, D> for Pos
     }
 }
 
-#[derive(Clone, Debug)]
-struct PoseidonMdsGenerator<const D: usize> {
+#[derive(Clone, Debug, Default)]
+pub struct PoseidonMdsGenerator<const D: usize> {
     row: usize,
 }
 
 impl<F: RichField + Extendable<D> + Poseidon, const D: usize> SimpleGenerator<F>
     for PoseidonMdsGenerator<D>
 {
+    fn id(&self) -> String {
+        "PoseidonMdsGenerator".to_string()
+    }
+
     fn dependencies(&self) -> Vec<Target> {
         (0..SPONGE_WIDTH)
             .flat_map(|i| {
@@ -283,6 +248,15 @@ impl<F: RichField + Extendable<D> + Poseidon, const D: usize> SimpleGenerator<F>
                 out,
             );
         }
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> IoResult<()> {
+        dst.write_usize(self.row)
+    }
+
+    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
+        let row = src.read_usize()?;
+        Ok(Self { row })
     }
 }
 

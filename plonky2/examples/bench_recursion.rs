@@ -3,25 +3,26 @@
 // put it in `src/bin/`, but then we wouldn't have access to
 // `[dev-dependencies]`.
 
+#![allow(clippy::upper_case_acronyms)]
+
 use core::num::ParseIntError;
 use core::ops::RangeInclusive;
 use core::str::FromStr;
 
 use anyhow::{anyhow, Context as _, Result};
 use log::{info, Level, LevelFilter};
-use maybe_rayon::rayon;
 use plonky2::gates::noop::NoopGate;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
-use plonky2::plonk::circuit_data::{
-    CircuitConfig, CommonCircuitData, VerifierCircuitTarget, VerifierOnlyCircuitData,
-};
+use plonky2::plonk::circuit_data::{CircuitConfig, CommonCircuitData, VerifierOnlyCircuitData};
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, PoseidonGoldilocksConfig};
 use plonky2::plonk::proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs};
 use plonky2::plonk::prover::prove;
+use plonky2::util::serialization::DefaultGateSerializer;
 use plonky2::util::timing::TimingTree;
 use plonky2_field::extension::Extendable;
+use plonky2_maybe_rayon::rayon;
 use rand::rngs::OsRng;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -83,7 +84,7 @@ fn dummy_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D
     let inputs = PartialWitness::new();
 
     let mut timing = TimingTree::new("prove", Level::Debug);
-    let proof = prove(&data.prover_only, &data.common, inputs, &mut timing)?;
+    let proof = prove::<F, C, D>(&data.prover_only, &data.common, inputs, &mut timing)?;
     timing.print();
     data.verify(proof.clone())?;
 
@@ -105,12 +106,9 @@ where
 {
     let (inner_proof, inner_vd, inner_cd) = inner;
     let mut builder = CircuitBuilder::<F, D>::new(config.clone());
-    let pt = builder.add_virtual_proof_with_pis::<InnerC>(inner_cd);
+    let pt = builder.add_virtual_proof_with_pis(inner_cd);
 
-    let inner_data = VerifierCircuitTarget {
-        constants_sigmas_cap: builder.add_virtual_cap(inner_cd.config.fri_config.cap_height),
-        circuit_digest: builder.add_virtual_hash(),
-    };
+    let inner_data = builder.add_virtual_verifier_data(inner_cd.config.fri_config.cap_height);
 
     builder.verify_proof::<InnerC>(&pt, &inner_data, inner_cd);
     builder.print_gate_counts(0);
@@ -133,7 +131,7 @@ where
     pw.set_verifier_data_target(&inner_data, inner_vd);
 
     let mut timing = TimingTree::new("prove", Level::Debug);
-    let proof = prove(&data.prover_only, &data.common, pw, &mut timing)?;
+    let proof = prove::<F, C, D>(&data.prover_only, &data.common, pw, &mut timing)?;
     timing.print();
 
     data.verify(proof.clone())?;
@@ -168,6 +166,19 @@ fn test_serialization<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, 
     let compressed_proof_from_bytes =
         CompressedProofWithPublicInputs::from_bytes(compressed_proof_bytes, cd)?;
     assert_eq!(compressed_proof, compressed_proof_from_bytes);
+
+    let gate_serializer = DefaultGateSerializer;
+    let common_data_bytes = cd
+        .to_bytes(&gate_serializer)
+        .map_err(|_| anyhow::Error::msg("CommonCircuitData serialization failed."))?;
+    info!(
+        "Common circuit data length: {} bytes",
+        common_data_bytes.len()
+    );
+    let common_data_from_bytes =
+        CommonCircuitData::<F, D>::from_bytes(common_data_bytes, &gate_serializer)
+            .map_err(|_| anyhow::Error::msg("CommonCircuitData deserialization failed."))?;
+    assert_eq!(cd, &common_data_from_bytes);
 
     Ok(())
 }
@@ -226,7 +237,7 @@ fn main() -> Result<()> {
     builder.try_init()?;
 
     // Initialize randomness source
-    let rng_seed = options.seed.unwrap_or_else(|| OsRng::default().next_u64());
+    let rng_seed = options.seed.unwrap_or_else(|| OsRng.next_u64());
     info!("Using random seed {rng_seed:16x}");
     let _rng = ChaCha8Rng::seed_from_u64(rng_seed);
     // TODO: Use `rng` to create deterministic runs

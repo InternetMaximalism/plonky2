@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -9,12 +8,13 @@ use crate::gates::gate::Gate;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
 use crate::iop::ext_target::ExtensionTarget;
-use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator};
+use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGeneratorRef};
 use crate::iop::target::Target;
 use crate::iop::witness::{PartitionWitness, Witness, WitnessWrite};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::circuit_data::CircuitConfig;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
+use crate::util::serialization::{Buffer, IoResult, Read, Write};
 
 /// A gate which can perform a weighted multiplication, i.e. `result = c0 x y`. If the config
 /// supports enough routed wires, it can support several such operations in one gate.
@@ -53,54 +53,13 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for MulExtensionGa
         format!("{self:?}")
     }
 
-    fn export_circom_verification_code(&self) -> String {
-        let mut template_str = format!(
-            "template MultiplicationExtension$NUM_OPS() {{
-  signal input constants[NUM_OPENINGS_CONSTANTS()][2];
-  signal input wires[NUM_OPENINGS_WIRES()][2];
-  signal input public_input_hash[4];
-  signal input constraints[NUM_GATE_CONSTRAINTS()][2];
-  signal output out[NUM_GATE_CONSTRAINTS()][2];
-
-  signal filter[2];
-  $SET_FILTER;
-
-  signal m[$NUM_OPS][2][2];
-  for (var i = 0; i < $NUM_OPS; i++) {{
-    m[i] <== WiresAlgebraMul(3 * $D * i, 3 * $D * i + $D)(wires);
-    for (var j = 0; j < $D; j++) {{
-      out[i * $D + j] <== ConstraintPush()(constraints[i * $D + j], filter, GlExtSub()(wires[3 * $D * i + 2 * $D + j], GlExtMul()(m[i][j], constants[$NUM_SELECTORS])));
-    }}
-  }}
-  for (var i = $NUM_OPS * $D; i < NUM_GATE_CONSTRAINTS(); i++) {{
-    out[i] <== constraints[i];
-  }}
-}}"
-        ).to_string();
-        template_str = template_str.replace("$NUM_OPS", &*self.num_ops.to_string());
-        template_str = template_str.replace("$D", &*D.to_string());
-        template_str
+    fn serialize(&self, dst: &mut Vec<u8>) -> IoResult<()> {
+        dst.write_usize(self.num_ops)
     }
-    fn export_solidity_verification_code(&self) -> String {
-        let mut template_str = format!(
-            "library MultiplicationExtension$NUM_OPSLib {{
-    using GoldilocksExtLib for uint64[2];
-    function set_filter(GatesUtilsLib.EvaluationVars memory ev) internal pure {{
-        $SET_FILTER;
-    }}
-    function eval(GatesUtilsLib.EvaluationVars memory ev, uint64[2][$NUM_GATE_CONSTRAINTS] memory constraints) internal pure {{
-        for (uint32 i = 0; i < $NUM_OPS; i++) {{
-            uint64[2][$D] memory m = GatesUtilsLib.wires_algebra_mul(ev.wires, 3 * $D * i, 3 * $D * i + $D);
-            for (uint32 j = 0; j < $D; j++) {{
-                GatesUtilsLib.push(constraints, ev.filter, i * $D + j, ev.wires[3 * $D * i + 2 * $D + j].sub(m[j].mul(ev.constants[$NUM_SELECTORS])));
-            }}
-        }}
-    }}
-}}"
-        )
-            .to_string();
-        template_str = template_str.replace("$NUM_OPS", &*self.num_ops.to_string());
-        template_str
+
+    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
+        let num_ops = src.read_usize()?;
+        Ok(Self { num_ops })
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
@@ -160,18 +119,17 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for MulExtensionGa
         constraints
     }
 
-    fn generators(&self, row: usize, local_constants: &[F]) -> Vec<Box<dyn WitnessGenerator<F>>> {
+    fn generators(&self, row: usize, local_constants: &[F]) -> Vec<WitnessGeneratorRef<F>> {
         (0..self.num_ops)
             .map(|i| {
-                let g: Box<dyn WitnessGenerator<F>> = Box::new(
+                WitnessGeneratorRef::new(
                     MulExtensionGenerator {
                         row,
                         const_0: local_constants[0],
                         i,
                     }
                     .adapter(),
-                );
-                g
+                )
             })
             .collect()
     }
@@ -193,8 +151,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for MulExtensionGa
     }
 }
 
-#[derive(Clone, Debug)]
-struct MulExtensionGenerator<F: RichField + Extendable<D>, const D: usize> {
+#[derive(Clone, Debug, Default)]
+pub struct MulExtensionGenerator<F: RichField + Extendable<D>, const D: usize> {
     row: usize,
     const_0: F,
     i: usize,
@@ -203,6 +161,10 @@ struct MulExtensionGenerator<F: RichField + Extendable<D>, const D: usize> {
 impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
     for MulExtensionGenerator<F, D>
 {
+    fn id(&self) -> String {
+        "MulExtensionGenerator".to_string()
+    }
+
     fn dependencies(&self) -> Vec<Target> {
         MulExtensionGate::<D>::wires_ith_multiplicand_0(self.i)
             .chain(MulExtensionGate::<D>::wires_ith_multiplicand_1(self.i))
@@ -227,6 +189,19 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
         let computed_output = (multiplicand_0 * multiplicand_1).scalar_mul(self.const_0);
 
         out_buffer.set_extension_target(output_target, computed_output)
+    }
+
+    fn serialize(&self, dst: &mut Vec<u8>) -> IoResult<()> {
+        dst.write_usize(self.row)?;
+        dst.write_field(self.const_0)?;
+        dst.write_usize(self.i)
+    }
+
+    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
+        let row = src.read_usize()?;
+        let const_0 = src.read_field()?;
+        let i = src.read_usize()?;
+        Ok(Self { row, const_0, i })
     }
 }
 

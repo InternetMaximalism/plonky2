@@ -46,13 +46,13 @@ impl Hash for GoldilocksField {
 
 impl Display for GoldilocksField {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
+        Display::fmt(&self.to_canonical_u64(), f)
     }
 }
 
 impl Debug for GoldilocksField {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Debug::fmt(&self.0, f)
+        Debug::fmt(&self.to_canonical_u64(), f)
     }
 }
 
@@ -115,6 +115,10 @@ impl Field for GoldilocksField {
     fn from_canonical_u64(n: u64) -> Self {
         debug_assert!(n < Self::ORDER);
         Self(n)
+    }
+
+    fn from_noncanonical_u96((n_lo, n_hi): (u64, u32)) -> Self {
+        reduce96((n_lo, n_hi))
     }
 
     fn from_noncanonical_u128(n: u128) -> Self {
@@ -342,6 +346,15 @@ unsafe fn add_no_canonicalize_trashing_input(x: u64, y: u64) -> u64 {
     let (res_wrapped, carry) = x.overflowing_add(y);
     // Below cannot overflow unless the assumption if x + y < 2**64 + ORDER is incorrect.
     res_wrapped + EPSILON * (carry as u64)
+}
+
+/// Reduces to a 64-bit value. The result might not be in canonical form; it could be in between the
+/// field order and `2^64`.
+#[inline]
+fn reduce96((x_lo, x_hi): (u64, u32)) -> GoldilocksField {
+    let t1 = x_hi as u64 * EPSILON;
+    let t2 = unsafe { add_no_canonicalize_trashing_input(x_lo, t1) };
+    GoldilocksField(t2)
 }
 
 /// Reduces to a 64-bit value. The result might not be in canonical form; it could be in between the

@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use core::slice;
 
-use maybe_rayon::*;
+use plonky2_maybe_rayon::*;
 use serde::{Deserialize, Serialize};
 
 use crate::hash::hash_types::RichField;
@@ -14,6 +14,7 @@ use crate::util::log2_strict;
 /// It can be used in place of the root to verify Merkle paths, which are `h` elements shorter.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(bound = "")]
+// TODO: Change H to GenericHashOut<F>, since this only cares about the hash, not the hasher.
 pub struct MerkleCap<F: RichField, H: Hasher<F>>(pub Vec<H::Hash>);
 
 impl<F: RichField, H: Hasher<F>> MerkleCap<F, H> {
@@ -34,7 +35,7 @@ impl<F: RichField, H: Hasher<F>> MerkleCap<F, H> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MerkleTree<F: RichField, H: Hasher<F>> {
     /// The data in the leaves of the Merkle tree.
     pub leaves: Vec<Vec<F>>,
@@ -83,7 +84,7 @@ fn fill_subtree<F: RichField, H: Hasher<F>>(
         // Split `leaves` between both children.
         let (left_leaves, right_leaves) = leaves.split_at(leaves.len() / 2);
 
-        let (left_digest, right_digest) = maybe_rayon::join(
+        let (left_digest, right_digest) = plonky2_maybe_rayon::join(
             || fill_subtree::<F, H>(left_digests_buf, left_leaves),
             || fill_subtree::<F, H>(right_digests_buf, right_leaves),
         );
@@ -183,7 +184,6 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
         // Mask out high bits to get the index within the sub-tree.
         let mut pair_index = leaf_index & ((1 << num_layers) - 1);
         let siblings = (0..num_layers)
-            .into_iter()
             .map(|i| {
                 let parity = pair_index & 1;
                 pair_index >>= 1;

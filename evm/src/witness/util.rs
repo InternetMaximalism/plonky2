@@ -27,16 +27,25 @@ fn to_bits_le<F: Field>(n: u8) -> [F; 8] {
     res
 }
 
-/// Peak at the stack item `i`th from the top. If `i=0` this gives the tip.
+/// Peek at the stack item `i`th from the top. If `i=0` this gives the tip.
 pub(crate) fn stack_peek<F: Field>(state: &GenerationState<F>, i: usize) -> Option<U256> {
     if i >= state.registers.stack_len {
         return None;
     }
     Some(state.memory.get(MemoryAddress::new(
-        state.registers.effective_context(),
+        state.registers.context,
         Segment::Stack,
         state.registers.stack_len - 1 - i,
     )))
+}
+
+/// Peek at kernel at specified segment and address
+pub(crate) fn kernel_peek<F: Field>(
+    state: &GenerationState<F>,
+    segment: Segment,
+    virt: usize,
+) -> U256 {
+    state.memory.get(MemoryAddress::new(0, segment, virt))
 }
 
 pub(crate) fn mem_read_with_log<F: Field>(
@@ -140,9 +149,9 @@ pub(crate) fn stack_pop_with_log_and_fill<const N: usize, F: Field>(
         return Err(ProgramError::StackUnderflow);
     }
 
-    let result = std::array::from_fn(|i| {
+    let result = core::array::from_fn(|i| {
         let address = MemoryAddress::new(
-            state.registers.effective_context(),
+            state.registers.context,
             Segment::Stack,
             state.registers.stack_len - 1 - i,
         );
@@ -164,7 +173,7 @@ pub(crate) fn stack_push_log_and_fill<F: Field>(
     }
 
     let address = MemoryAddress::new(
-        state.registers.effective_context(),
+        state.registers.context,
         Segment::Stack,
         state.registers.stack_len,
     );

@@ -1,7 +1,8 @@
-use alloc::boxed::Box;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::{format, vec};
+
+use serde::{Deserialize, Serialize};
 
 use crate::field::extension::Extendable;
 use crate::field::packed::PackedField;
@@ -10,15 +11,16 @@ use crate::gates::packed_util::PackedEvaluableBase;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
 use crate::iop::ext_target::ExtensionTarget;
-use crate::iop::generator::WitnessGenerator;
+use crate::iop::generator::WitnessGeneratorRef;
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
+use crate::util::serialization::{Buffer, IoResult, Read, Write};
 
 /// A gate which takes a single constant parameter and outputs that value.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct ConstantGate {
     pub(crate) num_consts: usize,
 }
@@ -40,48 +42,13 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ConstantGate {
         format!("{self:?}")
     }
 
-    fn export_circom_verification_code(&self) -> String {
-        let mut template_str = format!(
-            "template Constant$NUM_CONSTANTS() {{
-  signal input constants[NUM_OPENINGS_CONSTANTS()][2];
-  signal input wires[NUM_OPENINGS_WIRES()][2];
-  signal input public_input_hash[4];
-  signal input constraints[NUM_GATE_CONSTRAINTS()][2];
-  signal output out[NUM_GATE_CONSTRAINTS()][2];
-
-  signal filter[2];
-  $SET_FILTER;
-
-  for (var i = 0; i < $NUM_CONSTANTS; i++) {{
-    out[i] <== ConstraintPush()(constraints[i], filter, GlExtSub()(constants[$NUM_SELECTORS + i], wires[i]));
-  }}
-  for (var i = $NUM_CONSTANTS; i < NUM_GATE_CONSTRAINTS(); i++) {{
-    out[i] <== constraints[i];
-  }}
-}}"
-        ).to_string();
-        template_str = template_str.replace("$NUM_CONSTANTS", &*self.num_consts.to_string());
-        template_str
+    fn serialize(&self, dst: &mut Vec<u8>) -> IoResult<()> {
+        dst.write_usize(self.num_consts)
     }
-    fn export_solidity_verification_code(&self) -> String {
-        let mut template_str = format!(
-            "library Constant$NUM_CONSTANTSLib {{
-    function set_filter(GatesUtilsLib.EvaluationVars memory ev) internal pure {{
-        $SET_FILTER;
-    }}
-    using GoldilocksExtLib for uint64[2];
-    function eval(GatesUtilsLib.EvaluationVars memory ev, uint64[2][$NUM_GATE_CONSTRAINTS] memory constraints) internal pure {{
-        for (uint32 i = 0; i < $NUM_CONSTANTS; i++) {{
-            GatesUtilsLib.push(constraints, ev.filter, i, ev.constants[$NUM_SELECTORS + i].sub(ev.wires[i]));
-        }}
-    }}
-}}"
-        )
-            .to_string();
 
-        template_str = template_str.replace("$NUM_CONSTANTS", &*self.num_consts.to_string());
-
-        template_str
+    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
+        let num_consts = src.read_usize()?;
+        Ok(Self { num_consts })
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
@@ -119,7 +86,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ConstantGate {
             .collect()
     }
 
-    fn generators(&self, _row: usize, _local_constants: &[F]) -> Vec<Box<dyn WitnessGenerator<F>>> {
+    fn generators(&self, _row: usize, _local_constants: &[F]) -> Vec<WitnessGeneratorRef<F>> {
         vec![]
     }
 

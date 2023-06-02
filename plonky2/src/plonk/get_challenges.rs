@@ -43,14 +43,14 @@ fn get_challenges<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, cons
     challenger.observe_hash::<C::Hasher>(*circuit_digest);
     challenger.observe_hash::<C::InnerHasher>(public_inputs_hash);
 
-    challenger.observe_cap(wires_cap);
+    challenger.observe_cap::<C::Hasher>(wires_cap);
     let plonk_betas = challenger.get_n_challenges(num_challenges);
     let plonk_gammas = challenger.get_n_challenges(num_challenges);
 
-    challenger.observe_cap(plonk_zs_partial_products_cap);
+    challenger.observe_cap::<C::Hasher>(plonk_zs_partial_products_cap);
     let plonk_alphas = challenger.get_n_challenges(num_challenges);
 
-    challenger.observe_cap(quotient_polys_cap);
+    challenger.observe_cap::<C::Hasher>(quotient_polys_cap);
     let plonk_zeta = challenger.get_extension_challenge::<D>();
 
     challenger.observe_openings(&openings.to_fri_openings());
@@ -85,7 +85,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
     }
 
     /// Computes all Fiat-Shamir challenges used in the Plonk proof.
-    pub(crate) fn get_challenges(
+    pub fn get_challenges(
         &self,
         public_inputs_hash: <<C as GenericConfig<D>>::InnerHasher as Hasher<F>>::Hash,
         circuit_digest: &<<C as GenericConfig<D>>::Hasher as Hasher<C::F>>::Hash,
@@ -277,7 +277,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             plonk_gammas,
             plonk_alphas,
             plonk_zeta,
-            fri_challenges: challenger.fri_challenges::<C>(
+            fri_challenges: challenger.fri_challenges(
                 self,
                 commit_phase_merkle_caps,
                 final_poly,

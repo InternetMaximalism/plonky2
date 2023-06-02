@@ -3,7 +3,6 @@ use core::iter::once;
 
 use anyhow::{ensure, Result};
 use itertools::Itertools;
-use maybe_rayon::*;
 use plonky2::field::extension::Extendable;
 use plonky2::field::packable::Packable;
 use plonky2::field::packed::PackedField;
@@ -13,10 +12,11 @@ use plonky2::field::zero_poly_coset::ZeroPolyOnCoset;
 use plonky2::fri::oracle::PolynomialBatch;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::challenger::Challenger;
-use plonky2::plonk::config::{GenericConfig, Hasher};
+use plonky2::plonk::config::GenericConfig;
 use plonky2::timed;
 use plonky2::util::timing::TimingTree;
 use plonky2::util::{log2_ceil, log2_strict, transpose};
+use plonky2_maybe_rayon::*;
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
@@ -42,7 +42,6 @@ where
     S: Stark<F, D>,
     [(); S::COLUMNS]:,
     [(); S::PUBLIC_INPUTS]:,
-    [(); C::Hasher::HASH_SIZE]:,
 {
     let degree = trace_poly_values[0].len();
     let degree_bits = log2_strict(degree);
@@ -80,7 +79,7 @@ where
             config.num_challenges,
             stark.permutation_batch_size(),
         );
-        let permutation_z_polys = compute_permutation_z_polys::<F, C, S, D>(
+        let permutation_z_polys = compute_permutation_z_polys::<F, S, D>(
             &stark,
             config,
             &trace_poly_values,
@@ -285,7 +284,7 @@ where
                     permutation_challenge_sets: permutation_challenge_sets.to_vec(),
                 },
             );
-            eval_vanishing_poly::<F, F, P, C, S, D, 1>(
+            eval_vanishing_poly::<F, F, P, S, D, 1>(
                 stark,
                 config,
                 vars,
@@ -303,7 +302,7 @@ where
 
             let num_challenges = alphas.len();
 
-            (0..P::WIDTH).into_iter().map(move |i| {
+            (0..P::WIDTH).map(move |i| {
                 (0..num_challenges)
                     .map(|j| constraints_evals[j].as_slice()[i])
                     .collect()
