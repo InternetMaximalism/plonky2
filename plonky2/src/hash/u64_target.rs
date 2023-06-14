@@ -1,10 +1,10 @@
 use plonky2_field::types::Field;
 
-use crate::field::extension::{Extendable, FieldExtension};
+use crate::field::extension::Extendable;
 use crate::hash::hash_types::RichField;
 use crate::iop::ext_target::{ExtensionAlgebraTarget, ExtensionTarget};
 use crate::iop::target::BoolTarget;
-use crate::iop::witness::{Witness, WitnessWrite};
+use crate::iop::witness::Witness;
 use crate::plonk::circuit_builder::CircuitBuilder;
 
 #[derive(Clone, Debug)]

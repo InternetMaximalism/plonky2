@@ -14,8 +14,7 @@ use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
 use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGeneratorRef};
-use crate::iop::target::{BoolTarget, Target};
-use crate::iop::wire::Wire;
+use crate::iop::target::Target;
 use crate::iop::witness::{PartitionWitness, Witness, WitnessWrite};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
@@ -48,33 +47,6 @@ pub fn calc_xor5<F: Field>(input: [F; WIDTH]) -> F {
     let xor34 = xor(input[3], input[4]);
 
     xor(xor012, xor34)
-}
-
-/// https://github.com/polymerdao/plonky2-sha256/blob/main/src/circuit.rs#L105
-/// a ^ b ^ c = a+b+c - 2*a*b - 2*a*c - 2*b*c + 4*a*b*c
-///           = a*( 1 - 2*b - 2*c + 4*b*c ) + b + c - 2*b*c
-///           = a*( 1 - 2*b -2*c + 4*m ) + b + c - 2*m
-/// where m = b*c
-fn xor3<F: RichField + Extendable<D>, const D: usize>(
-    builder: &mut CircuitBuilder<F, D>,
-    a: BoolTarget,
-    b: BoolTarget,
-    c: BoolTarget,
-) -> BoolTarget {
-    let m = builder.mul(b.target, c.target);
-    let two_b = builder.add(b.target, b.target);
-    let two_c = builder.add(c.target, c.target);
-    let two_m = builder.add(m, m);
-    let four_m = builder.add(two_m, two_m);
-    let one = builder.one();
-    let one_sub_two_b = builder.sub(one, two_b);
-    let one_sub_two_b_sub_two_c = builder.sub(one_sub_two_b, two_c);
-    let one_sub_two_b_sub_two_c_add_four_m = builder.add(one_sub_two_b_sub_two_c, four_m);
-    let mut res = builder.mul(a.target, one_sub_two_b_sub_two_c_add_four_m);
-    res = builder.add(res, b.target);
-    res = builder.add(res, c.target);
-
-    BoolTarget::new_unsafe(builder.sub(res, two_m))
 }
 
 /// Keccak256 rho and pi Gate
@@ -230,9 +202,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for Xor5Ge
 
     fn dependencies(&self) -> Vec<Target> {
         (0..WIDTH)
-            .flat_map(|i| {
-                Target::wires_from_range(self.row, Xor5Gate::<F, D>::wires_input(i))
-            })
+            .flat_map(|i| Target::wires_from_range(self.row, Xor5Gate::<F, D>::wires_input(i)))
             .collect()
     }
 

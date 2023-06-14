@@ -7,7 +7,6 @@ use itertools::Itertools;
 use crate::field::extension::Extendable;
 use crate::field::types::Field;
 use crate::gates::base_sum::BaseSumGate;
-use crate::gates::base_sum_mini::BaseSumMiniGate;
 use crate::hash::hash_types::RichField;
 use crate::iop::generator::{GeneratedValues, SimpleGenerator};
 use crate::iop::target::{BoolTarget, Target};
@@ -23,15 +22,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let gate_type = BaseSumGate::<B>::new(num_limbs);
         let gate = self.add_gate(gate_type, vec![]);
         let sum = Target::wire(gate, BaseSumGate::<B>::WIRE_SUM);
-        self.connect(x, sum);
-
-        Target::wires_from_range(gate, gate_type.limbs())
-    }
-
-    pub fn split_le_base_mini<const B: usize>(&mut self, x: Target, num_limbs: usize) -> Vec<Target> {
-        let gate_type = BaseSumMiniGate::<B>::new(num_limbs);
-        let gate = self.add_gate(gate_type, vec![]);
-        let sum = Target::wire(gate, BaseSumMiniGate::<B>::WIRE_SUM);
         self.connect(x, sum);
 
         Target::wires_from_range(gate, gate_type.limbs())
@@ -132,8 +122,6 @@ impl<F: Field, const B: usize> SimpleGenerator<F> for BaseSumGenerator<B> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-
     use anyhow::Result;
     use rand::rngs::OsRng;
     use rand::Rng;
@@ -170,83 +158,6 @@ mod tests {
         let proof = data.prove(pw)?;
 
         verify(proof, &data.verifier_only, &data.common)
-    }
-
-    #[test]
-    fn test_split_mini_base() -> Result<()> {
-        const D: usize = 2;
-        type C = PoseidonGoldilocksConfig;
-        type F = <C as GenericConfig<D>>::F;
-        let config = CircuitConfig::standard_recursion_config();
-        let pw = PartialWitness::new();
-        let mut builder = CircuitBuilder::<F, D>::new(config);
-        let x = F::from_canonical_usize(0b110100000); // 416 = 1532 in base 6.
-        let xt = builder.constant(x);
-        let limbs = builder.split_le_base_mini::<6>(xt, 24);
-        let one = builder.one();
-        let two = builder.two();
-        let three = builder.constant(F::from_canonical_u64(3));
-        let five = builder.constant(F::from_canonical_u64(5));
-        builder.connect(limbs[0], two);
-        builder.connect(limbs[1], three);
-        builder.connect(limbs[2], five);
-        builder.connect(limbs[3], one);
-
-        builder.assert_leading_zeros(xt, 64 - 9);
-        let data = builder.build::<C>();
-
-        let proof_with_pis = data.prove(pw)?;
-
-        verify(proof_with_pis.clone(), &data.verifier_only, &data.common).unwrap();
-
-        let inner_circuit_data = data;
-        let config = CircuitConfig::standard_recursion_config();
-        let mut builder = CircuitBuilder::<F, D>::new(config);
-        let proof_with_pis_t = builder.add_virtual_proof_with_pis(&inner_circuit_data.common);
-        let vd_target = builder.constant_verifier_data(&inner_circuit_data.verifier_only);
-        // let vd_target = builder.add_virtual_verifier_data(inner_circuit_data.common.config.fri_config.cap_height);
-        builder.verify_proof::<C>(&proof_with_pis_t, &vd_target, &inner_circuit_data.common);
-        dbg!(builder.num_gates());
-        let first_recursion_circuit_data = builder.build::<C>();
-
-        let mut pw = PartialWitness::new();
-        pw.set_proof_with_pis_target::<C, D>(&proof_with_pis_t, &proof_with_pis);
-        // pw.set_verifier_data_target(&vd_target, &inner_circuit_data.verifier_only);
-
-        let now = Instant::now();
-        let proof_with_pis = first_recursion_circuit_data.prove(pw).unwrap();
-
-        println!("time = {} ms", now.elapsed().as_millis());
-        println!(
-            "degree = {}, degree_bits= {}",
-            inner_circuit_data.common.degree(),
-            inner_circuit_data.common.degree_bits()
-        );
-
-        let inner_circuit_data = first_recursion_circuit_data;
-        let config = CircuitConfig::standard_recursion_config();
-        let mut builder = CircuitBuilder::<F, D>::new(config);
-        let proof_with_pis_t = builder.add_virtual_proof_with_pis(&inner_circuit_data.common);
-        let vd_target = builder.constant_verifier_data(&inner_circuit_data.verifier_only);
-        // let vd_target = builder.add_virtual_verifier_data(inner_circuit_data.common.config.fri_config.cap_height);
-        builder.verify_proof::<C>(&proof_with_pis_t, &vd_target, &inner_circuit_data.common);
-        dbg!(builder.num_gates());
-        let second_recursion_circuit_data = builder.build::<C>();
-
-        let mut pw = PartialWitness::new();
-        pw.set_proof_with_pis_target::<C, D>(&proof_with_pis_t, &proof_with_pis);
-
-        let now = Instant::now();
-        let proof_with_pis = second_recursion_circuit_data.prove(pw).unwrap();
-
-        println!("time = {} ms", now.elapsed().as_millis());
-        println!(
-            "degree = {}, degree_bits= {}",
-            inner_circuit_data.common.degree(),
-            inner_circuit_data.common.degree_bits()
-        );
-
-        Ok(())
     }
 
     #[test]

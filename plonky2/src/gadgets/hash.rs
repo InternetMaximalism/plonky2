@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
 use crate::field::extension::Extendable;
-use crate::gates::keccak256::{Keccak256ThetaGate, STATE_SIZE, WIDTH};
-use crate::gates::keccak256_mini::Xor5Gate;
+use crate::gates::keccak256::{Keccak256Gate, STATE_SIZE, WIDTH};
+use crate::gates::keccak_theta::Xor5Gate;
 use crate::hash::hash_types::{HashOutTarget, RichField};
 use crate::hash::u64_target::U64Target;
 use crate::iop::ext_target::ExtensionTarget;
@@ -62,15 +62,15 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         output
     }
 
-    pub fn keccak256_theta(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; WIDTH] {
-        let gate_type = Keccak256ThetaGate::<F, D>::new();
+    pub fn keccak256(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; WIDTH] {
+        let gate_type = Keccak256Gate::<F, D>::new();
         let gate = self.add_gate(gate_type, vec![]);
 
         // Route input wires.
         // let inputs = inputs.as_ref();
         for i in 0..STATE_SIZE {
             let in_wire = U64Target {
-                bits: Keccak256ThetaGate::<F, D>::wires_input(i)
+                bits: Keccak256Gate::<F, D>::wires_input(i)
                     .map(|v| BoolTarget::new_unsafe(Target::wire(gate, v)))
                     .collect::<Vec<_>>(),
             };
@@ -80,7 +80,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         // Collect output wires.
         (0..5).map(|i| {
             U64Target {
-                bits: Keccak256ThetaGate::<F, D>::wires_output(i)
+                bits: Keccak256Gate::<F, D>::wires_output(i)
                     .map(|v| BoolTarget::new_unsafe(Target::wire(gate, v)))
                     .collect::<Vec<_>>(),
             }
@@ -96,7 +96,7 @@ mod tests {
         field::goldilocks_field::GoldilocksField,
         plonk::{circuit_data::CircuitConfig, circuit_builder::CircuitBuilder, config::PoseidonGoldilocksConfig},
         iop::witness::{PartialWitness, WitnessWrite},
-        gates::keccak256::{STATE_SIZE, WIDTH, calc_keccak256_theta},
+        gates::keccak256::{STATE_SIZE},
         hash::u64_target::U64Target,
     };
 
@@ -114,7 +114,7 @@ mod tests {
             // let inputs = [(); WIDTH].map(|_| builder.add_virtual_bool_target_safe());
             // let outputs = builder.xor5(inputs);
             let inputs = [(); STATE_SIZE].map(|_| U64Target::new(&mut builder));
-            let outputs = builder.keccak256_theta(inputs.clone());
+            let outputs = builder.keccak256(inputs.clone());
 
             (inputs, outputs)
         }).collect::<Vec<_>>();
@@ -182,7 +182,7 @@ mod tests {
         pw.set_proof_with_pis_target::<C, D>(&proof_with_pis_t, &proof_with_pis);
 
         let now = Instant::now();
-        let proof_with_pis = second_recursion_circuit_data.prove(pw).unwrap();
+        let _proof_with_pis = second_recursion_circuit_data.prove(pw).unwrap();
 
         println!("time = {} ms", now.elapsed().as_millis());
         println!(

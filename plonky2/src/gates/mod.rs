@@ -1,7 +1,6 @@
 // Gates have `new` methods that return `GateRef`s.
 #![allow(clippy::new_ret_no_self)]
 
-pub mod base_sum_mini;
 pub mod arithmetic_base;
 pub mod arithmetic_extension;
 pub mod base_sum;
@@ -9,8 +8,8 @@ pub mod constant;
 pub mod coset_interpolation;
 pub mod exponentiation;
 pub mod gate;
+pub mod keccak_theta;
 pub mod keccak256;
-pub mod keccak256_mini;
 pub mod multiplication_extension;
 pub mod noop;
 pub mod packed_util;

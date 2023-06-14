@@ -12,14 +12,14 @@ use crate::hash::hash_types::RichField;
 use crate::hash::u64_target::U64AlgebraTarget;
 use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGeneratorRef};
-use crate::iop::target::{BoolTarget, Target};
+use crate::iop::target::Target;
 use crate::iop::wire::Wire;
 use crate::iop::witness::{PartitionWitness, Witness, WitnessWrite};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
 use crate::util::serialization::{Buffer, IoResult, Read, Write};
 
-use super::keccak256_mini::Xor5Gate;
+use super::keccak_theta::Xor5Gate;
 
 pub const WIDTH: usize = 5;
 pub const STATE_SIZE: usize = WIDTH * WIDTH;
@@ -52,9 +52,9 @@ pub fn calc_keccak256_theta<F: Field>(input: &[[F; 64]; STATE_SIZE]) -> [[F; 64]
 /// Keccak256 rho and pi Gate
 /// 5 times xor
 #[derive(Debug, Default)]
-pub struct Keccak256ThetaGate<F: RichField + Extendable<D>, const D: usize>(PhantomData<F>);
+pub struct Keccak256Gate<F: RichField + Extendable<D>, const D: usize>(PhantomData<F>);
 
-impl<F: RichField + Extendable<D>, const D: usize> Keccak256ThetaGate<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> Keccak256Gate<F, D> {
     pub fn new() -> Self {
         Self(PhantomData)
     }
@@ -89,7 +89,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Keccak256ThetaGate<F, D> {
     // }
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256ThetaGate<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Gate<F, D> {
     fn id(&self) -> String {
         format!("{self:?}")
     }
@@ -99,7 +99,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Theta
     }
 
     fn deserialize(_src: &mut Buffer) -> IoResult<Self> {
-        Ok(Keccak256ThetaGate::new())
+        Ok(Keccak256Gate::new())
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
@@ -287,7 +287,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
     fn dependencies(&self) -> Vec<Target> {
         (0..STATE_SIZE)
             .flat_map(|i| {
-                Target::wires_from_range(self.row, Keccak256ThetaGate::<F, D>::wires_input(i))
+                Target::wires_from_range(self.row, Keccak256Gate::<F, D>::wires_input(i))
             })
             .collect()
     }
@@ -300,7 +300,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
 
         let inputs: [_; STATE_SIZE] = (0..STATE_SIZE)
             .map(|i| {
-                Keccak256ThetaGate::<F, D>::wires_input(i)
+                Keccak256Gate::<F, D>::wires_input(i)
                     .map(|j| witness.get_wire(local_wire(j)))
                     .collect::<Vec<_>>()
                     .try_into()
@@ -313,7 +313,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
         let computed_outputs = calc_keccak256_theta(&inputs);
 
         for (i, computed_out) in computed_outputs.into_iter().enumerate() {
-            let out = Keccak256ThetaGate::<F, D>::wires_output(i)
+            let out = Keccak256Gate::<F, D>::wires_output(i)
                 .map(local_wire)
                 .collect::<Vec<_>>();
             out_buffer.set_wires(out, &computed_out);
@@ -335,7 +335,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
 
 #[cfg(test)]
 mod tests {
-    use super::Keccak256ThetaGate;
+    use super::Keccak256Gate;
     use crate::gates::gate_testing::{test_eval_fns, test_low_degree};
     use crate::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
 
@@ -344,7 +344,7 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        let gate = Keccak256ThetaGate::<F, D>::new();
+        let gate = Keccak256Gate::<F, D>::new();
         test_low_degree(gate)
     }
 
@@ -353,7 +353,7 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        let gate = Keccak256ThetaGate::<F, D>::new();
+        let gate = Keccak256Gate::<F, D>::new();
         test_eval_fns::<F, C, _, D>(gate)
     }
 }
