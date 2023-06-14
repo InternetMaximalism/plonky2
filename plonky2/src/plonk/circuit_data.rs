@@ -86,6 +86,14 @@ impl CircuitConfig {
         }
     }
 
+    pub fn standard_keccak_config() -> Self {
+        Self {
+            num_wires: 1920,
+            num_routed_wires: 1920,
+            ..Self::standard_recursion_config()
+        }
+    }
+
     pub fn standard_ecc_config() -> Self {
         Self {
             num_wires: 136,
