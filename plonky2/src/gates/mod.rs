@@ -8,6 +8,7 @@ pub mod constant;
 pub mod coset_interpolation;
 pub mod exponentiation;
 pub mod gate;
+pub mod keccak_chi;
 pub mod keccak_theta;
 pub mod keccak256;
 pub mod multiplication_extension;

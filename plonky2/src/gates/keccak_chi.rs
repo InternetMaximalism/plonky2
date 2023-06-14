@@ -7,6 +7,7 @@ use core::ops::Range;
 use plonky2_field::extension::algebra::ExtensionAlgebra;
 use plonky2_field::extension::{FieldExtension, OEF};
 
+use super::keccak_theta::{xor, xor_ext_algebra};
 use crate::field::extension::Extendable;
 use crate::field::types::Field;
 use crate::gates::gate::Gate;
@@ -23,58 +24,56 @@ use crate::util::serialization::{Buffer, IoResult, Read, Write};
 pub const WIDTH: usize = 5;
 pub const STATE_SIZE: usize = WIDTH * WIDTH;
 
-pub fn xor<F: Field>(a: F, b: F) -> F {
-    // a + b - 2ab
-    let ab = a * b;
+pub fn xor_and_not<F: Field>(a: F, b: F, c: F) -> F {
+    let not_c = F::ONE - c;
+    let b_and_not_c = b * not_c;
 
-    a + b - ab.double()
+    xor(a, b_and_not_c)
 }
 
-pub fn xor_ext_algebra<F: OEF<D>, const D: usize>(
+pub fn xor_and_not_ext_algebra<F: OEF<D>, const D: usize>(
     a: ExtensionAlgebra<F, D>,
     b: ExtensionAlgebra<F, D>,
+    c: ExtensionAlgebra<F, D>,
 ) -> ExtensionAlgebra<F, D> {
-    // a + b - 2ab
-    let ab = a * b;
+    let not_c = ExtensionAlgebra::one() - c;
+    let b_and_not_c = b * not_c;
 
-    a + b - ab - ab
+    xor_ext_algebra(a, b_and_not_c)
 }
 
-/// Same as `mds_row_shf` for an extension algebra of `F`.
-pub fn calc_xor5<F: Field>(input: [F; WIDTH]) -> F {
-    let xor01 = xor(input[0], input[1]);
-    let xor012 = xor(xor01, input[2]);
-    let xor34 = xor(input[3], input[4]);
-
-    xor(xor012, xor34)
-}
-
-/// Keccak256 theta Gate
-/// 5 times xor
+/// Keccak256 chi Gate
+/// Calculate `a XOR (b AND (NOT c))`
 #[derive(Debug, Default)]
-pub struct Xor5Gate<F: RichField + Extendable<D>, const D: usize>(PhantomData<F>);
+pub struct XorAndNotGate<F: RichField + Extendable<D>, const D: usize>(PhantomData<F>);
 
-impl<F: RichField + Extendable<D>, const D: usize> Xor5Gate<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> XorAndNotGate<F, D> {
     pub fn new() -> Self {
         Self(PhantomData)
     }
 
-    pub fn wires_input(i: usize) -> Range<usize> {
-        assert!(i < WIDTH);
+    pub fn wires_a() -> Range<usize> {
+        0..D
+    }
 
-        i * D..(i + 1) * D
+    pub fn wires_b() -> Range<usize> {
+        D..2 * D
+    }
+
+    pub fn wires_c() -> Range<usize> {
+        2 * D..3 * D
     }
 
     pub fn wires_output() -> Range<usize> {
-        WIDTH * D..(WIDTH + 1) * D
+        3 * D..4 * D
     }
 
     pub fn end() -> usize {
-        (WIDTH + 1) * D
+        4 * D
     }
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Xor5Gate<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for XorAndNotGate<F, D> {
     fn id(&self) -> String {
         format!("{self:?}")
     }
@@ -88,19 +87,14 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Xor5Gate<F, D>
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
-        let inputs: [_; WIDTH] = (0..WIDTH)
-            .map(|i| vars.get_local_ext_algebra(Self::wires_input(i)))
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
+        let a = vars.get_local_ext_algebra(Self::wires_a());
+        let b = vars.get_local_ext_algebra(Self::wires_b());
+        let c = vars.get_local_ext_algebra(Self::wires_c());
         let output = vars.get_local_ext_algebra(Self::wires_output());
 
-        let xor01 = xor_ext_algebra(inputs[0], inputs[1]);
-        let xor012 = xor_ext_algebra(xor01, inputs[2]);
-        let xor0123 = xor_ext_algebra(xor012, inputs[3]);
-        let xor01234 = xor_ext_algebra(xor0123, inputs[4]);
+        let a_xor_b_and_not_c = xor_and_not_ext_algebra(a, b, c);
 
-        (xor01234 - output).to_basefield_array().to_vec()
+        (a_xor_b_and_not_c - output).to_basefield_array().to_vec()
     }
 
     fn eval_unfiltered_base_one(
@@ -108,20 +102,15 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Xor5Gate<F, D>
         vars: EvaluationVarsBase<F>,
         mut yield_constr: StridedConstraintConsumer<F>,
     ) {
-        let inputs: [_; WIDTH] = (0..WIDTH)
-            .map(|i| vars.get_local_ext(Self::wires_input(i)))
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
+        let a = vars.get_local_ext(Self::wires_a());
+        let b = vars.get_local_ext(Self::wires_b());
+        let c = vars.get_local_ext(Self::wires_c());
 
         let output = vars.get_local_ext(Self::wires_output());
 
-        let xor01 = xor(inputs[0], inputs[1]);
-        let xor012 = xor(xor01, inputs[2]);
-        let xor0123 = xor(xor012, inputs[3]);
-        let xor01234 = xor(xor0123, inputs[4]);
+        let a_xor_b_and_not_c = xor_and_not(a, b, c);
 
-        yield_constr.many((xor01234 - output).to_basefield_array());
+        yield_constr.many((a_xor_b_and_not_c - output).to_basefield_array());
     }
 
     fn eval_unfiltered_circuit(
@@ -129,26 +118,21 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Xor5Gate<F, D>
         builder: &mut CircuitBuilder<F, D>,
         vars: EvaluationTargets<D>,
     ) -> Vec<ExtensionTarget<D>> {
-        let inputs: [_; WIDTH] = (0..WIDTH)
-            .map(|i| vars.get_local_ext_algebra(Self::wires_input(i)))
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
+        let a = vars.get_local_ext_algebra(Self::wires_a());
+        let b = vars.get_local_ext_algebra(Self::wires_b());
+        let c = vars.get_local_ext_algebra(Self::wires_c());
         let output = vars.get_local_ext_algebra(Self::wires_output());
 
-        let xor01 = builder.xor_ext_algebra(inputs[0], inputs[1]);
-        let xor012 = builder.xor_ext_algebra(xor01, inputs[2]);
-        let xor0123 = builder.xor_ext_algebra(xor012, inputs[3]);
-        let xor01234 = builder.xor_ext_algebra(xor0123, inputs[4]);
+        let a_xor_b_and_not_c = builder.xor_and_not_ext_algebra(a, b, c);
 
         builder
-            .sub_ext_algebra(xor01234, output)
+            .sub_ext_algebra(a_xor_b_and_not_c, output)
             .to_ext_target_array()
             .to_vec()
     }
 
     fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<WitnessGeneratorRef<F>> {
-        let gen = Xor5Generator {
+        let gen = XorAndNotGenerator {
             row,
             _phantom: PhantomData,
         };
@@ -164,7 +148,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Xor5Gate<F, D>
     }
 
     fn degree(&self) -> usize {
-        5
+        3
     }
 
     fn num_constraints(&self) -> usize {
@@ -173,20 +157,23 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Xor5Gate<F, D>
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct Xor5Generator<F: RichField + Extendable<D>, const D: usize> {
+pub struct XorAndNotGenerator<F: RichField + Extendable<D>, const D: usize> {
     row: usize,
     _phantom: PhantomData<F>,
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for Xor5Generator<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for XorAndNotGenerator<F, D> {
     fn id(&self) -> String {
-        "Xor5Generator".to_string()
+        "XorAndNotGenerator".to_string()
     }
 
     fn dependencies(&self) -> Vec<Target> {
-        (0..WIDTH)
-            .flat_map(|i| Target::wires_from_range(self.row, Xor5Gate::<F, D>::wires_input(i)))
-            .collect()
+        vec![
+            Target::wires_from_range(self.row, XorAndNotGate::<F, D>::wires_a()),
+            Target::wires_from_range(self.row, XorAndNotGate::<F, D>::wires_b()),
+            Target::wires_from_range(self.row, XorAndNotGate::<F, D>::wires_c()),
+        ]
+        .concat()
     }
 
     fn run_once(&self, witness: &PartitionWitness<F>, out_buffer: &mut GeneratedValues<F>) {
@@ -194,16 +181,14 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for Xor5Ge
         let get_local_ext =
             |wire_range| witness.get_extension_target(get_local_get_target(wire_range));
 
-        let inputs: [_; WIDTH] = (0..WIDTH)
-            .map(|i| get_local_ext(Xor5Gate::<F, D>::wires_input(i)))
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
+        let a = get_local_ext(XorAndNotGate::<F, D>::wires_a());
+        let b = get_local_ext(XorAndNotGate::<F, D>::wires_b());
+        let c = get_local_ext(XorAndNotGate::<F, D>::wires_c());
 
-        let computed_output = calc_xor5(inputs);
+        let computed_output = xor_and_not(a, b, c);
 
         out_buffer.set_extension_target(
-            get_local_get_target(Xor5Gate::<F, D>::wires_output()),
+            get_local_get_target(XorAndNotGate::<F, D>::wires_output()),
             computed_output,
         );
     }
@@ -223,7 +208,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for Xor5Ge
 
 #[cfg(test)]
 mod tests {
-    use super::Xor5Gate;
+    use super::XorAndNotGate;
     use crate::gates::gate_testing::{test_eval_fns, test_low_degree};
     use crate::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
 
@@ -232,7 +217,7 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        let gate = Xor5Gate::<F, D>::new();
+        let gate = XorAndNotGate::<F, D>::new();
         test_low_degree(gate)
     }
 
@@ -241,7 +226,7 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        let gate = Xor5Gate::<F, D>::new();
+        let gate = XorAndNotGate::<F, D>::new();
         test_eval_fns::<F, C, _, D>(gate)
     }
 }

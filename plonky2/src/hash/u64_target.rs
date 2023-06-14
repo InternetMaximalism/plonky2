@@ -336,6 +336,19 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         self.scalar_mul_add_ext_algebra(neg_two, ab, a_plus_b)
     }
 
+    pub fn xor_and_not_ext_algebra(
+        &mut self,
+        a: ExtensionAlgebraTarget<D>,
+        b: ExtensionAlgebraTarget<D>,
+        c: ExtensionAlgebraTarget<D>,
+    ) -> ExtensionAlgebraTarget<D> {
+        let one = self.constant_ext_algebra(F::Extension::ONE.into());
+        let not_c = self.sub_ext_algebra(one, c);
+        let b_and_not_c = self.mul_ext_algebra(b, not_c);
+
+        self.xor_ext_algebra(a, b_and_not_c)
+    }
+
     pub fn xor_u64_algebra(
         &mut self,
         a: U64AlgebraTarget<D>,
