@@ -120,7 +120,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Gate<
             .collect::<Vec<_>>();
 
         let mut tmps = (0..STATE_SIZE)
-            .map(|i| vars.local_wires[Self::wires_input(i)].to_vec())
+            .map(|i| vars.local_wires[Self::wires_tmp(i)].to_vec())
             .collect::<Vec<_>>();
 
         let outputs = (0..WIDTH)
@@ -138,7 +138,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Gate<
                         inputs[(x + 1) % 5 + y * 5][i],
                     );
                     constraints.push(tmps[x + y * 5][i] - chi);
-                    tmps[x + y * 5][i] = chi
+                    // tmps[x + y * 5][i] = chi;
                 }
             }
         }
@@ -171,7 +171,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Gate<
 
         let mut tmps = (0..STATE_SIZE)
             .map(|i| {
-                Self::wires_input(i)
+                Self::wires_tmp(i)
                     .map(|j| vars.local_wires[j])
                     .collect::<Vec<_>>()
             })
@@ -194,7 +194,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Gate<
                         inputs[(x + 1) % 5 + y * 5][i],
                     );
                     yield_constr.one(tmps[x + y * 5][i] - chi);
-                    tmps[x + y * 5][i] = chi;
+                    // tmps[x + y * 5][i] = chi;
                 }
             }
         }
@@ -284,7 +284,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Gate<
                         ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_output());
                     // builder.connect_extension(out_wire, o);
                     constraints.push(builder.sub_extension(*o, out_wire));
-                    *o = out_wire;
+                    // *o = out_wire;
                 }
             }
         }
@@ -347,7 +347,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Gate<
         0
     }
 
-    // XXX
+    // XXX: why not 1
     fn degree(&self) -> usize {
         8
     }
