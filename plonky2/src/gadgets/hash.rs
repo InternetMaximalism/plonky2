@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::field::extension::Extendable;
-use crate::gates::keccak256::{Keccak256Gate, STATE_SIZE, WIDTH};
+use crate::gates::keccak256::{Keccak256RoundGate, STATE_SIZE, WIDTH};
 use crate::gates::keccak_chi::XorAndNotGate;
 use crate::gates::keccak_theta::Xor5Gate;
 use crate::hash::hash_types::{HashOutTarget, RichField};
@@ -88,35 +88,24 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 
     pub fn keccak256(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; WIDTH] {
-        let gate_type = Keccak256Gate::<F, D>::new();
+        let gate_type = Keccak256RoundGate::<F, D>::new();
         let gate = self.add_gate(gate_type, vec![]);
 
         // Route input wires.
         // let inputs = inputs.as_ref();
         for i in 0..STATE_SIZE {
             let in_wire = U64Target {
-                bits: Keccak256Gate::<F, D>::wires_input(i)
+                bits: Keccak256RoundGate::<F, D>::wires_input(i)
                     .map(|v| BoolTarget::new_unsafe(Target::wire(gate, v)))
                     .collect::<Vec<_>>(),
             };
             inputs[i].connect(&in_wire, self);
         }
 
-        // // Collect tmp wires.
-        // (0..STATE_SIZE)
-        //     .map(|i| U64Target {
-        //         bits: Keccak256Gate::<F, D>::wires_tmp(i)
-        //             .map(|v| BoolTarget::new_unsafe(Target::wire(gate, v)))
-        //             .collect::<Vec<_>>(),
-        //     })
-        //     .collect::<Vec<_>>()
-        //     .try_into()
-        //     .unwrap()
-
         // Collect output wires.
         (0..5)
             .map(|i| U64Target {
-                bits: Keccak256Gate::<F, D>::wires_output(i)
+                bits: Keccak256RoundGate::<F, D>::wires_output(i)
                     .map(|v| BoolTarget::new_unsafe(Target::wire(gate, v)))
                     .collect::<Vec<_>>(),
             })
