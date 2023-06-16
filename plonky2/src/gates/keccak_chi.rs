@@ -24,14 +24,19 @@ use crate::util::serialization::{Buffer, IoResult, Read, Write};
 pub const WIDTH: usize = 5;
 pub const STATE_SIZE: usize = WIDTH * WIDTH;
 
-pub fn xor_and_not<F: Field>(a: F, b: F, c: F) -> F {
-    let not_c = F::ONE - c;
-    let b_and_not_c = b * not_c;
+pub fn and_not<F: Field>(a: F, b: F) -> F {
+    let not_b = F::ONE - b;
+
+    a * not_b
+}
+
+fn xor_and_not<F: Field>(a: F, b: F, c: F) -> F {
+    let b_and_not_c = and_not(b, c);
 
     xor(a, b_and_not_c)
 }
 
-pub fn xor_and_not_ext_algebra<F: OEF<D>, const D: usize>(
+fn xor_and_not_ext_algebra<F: OEF<D>, const D: usize>(
     a: ExtensionAlgebra<F, D>,
     b: ExtensionAlgebra<F, D>,
     c: ExtensionAlgebra<F, D>,
