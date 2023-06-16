@@ -307,7 +307,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
         for y in 0..5 {
             for x in 0..5 {
                 for i in 0..64 {
-                    let b_and_not_c = and_not(bs[(x + 2) % 5 + y * 5][i], bs[(x + 1) % 5 + y * 5][i]);
+                    let b_and_not_c =
+                        and_not(bs[(x + 2) % 5 + y * 5][i], bs[(x + 1) % 5 + y * 5][i]);
                     let a_xor_o = xor(bs[x + y * 5][i], outputs[x + y * 5][i]);
                     yield_constr.one(b_and_not_c - a_xor_o);
                 }

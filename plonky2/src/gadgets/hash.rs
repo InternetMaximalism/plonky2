@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 
 use crate::field::extension::Extendable;
-use crate::gates::keccak256::{Keccak256RoundGate, STATE_SIZE, WIDTH, ROUND_CONSTANTS};
+use crate::gates::keccak256::{Keccak256RoundGate, ROUND_CONSTANTS, STATE_SIZE, WIDTH};
 use crate::gates::keccak_chi::XorAndNotGate;
 use crate::gates::keccak_theta::Xor5Gate;
 use crate::hash::hash_types::{HashOutTarget, RichField};
-use crate::hash::u64_target::{U64Target};
+use crate::hash::u64_target::{xor_circuit, U64Target};
 use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::target::{BoolTarget, Target};
 use crate::plonk::circuit_builder::CircuitBuilder;
@@ -133,8 +133,72 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         state
     }
 
-    pub fn keccak256(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; STATE_SIZE] {
-        self.keccak_f(inputs)
+    pub fn keccak256(&mut self, input: Vec<BoolTarget>) -> Vec<BoolTarget>
+    where
+        F: RichField + Extendable<D>,
+    {
+        assert_eq!(input.len() % 8, 0); // input should be bytes.
+        let block_size_in_bytes = 136; // in bytes
+        let input_len_in_bytes = input.len() / 8;
+        let num_blocks = input_len_in_bytes / block_size_in_bytes + 1;
+        dbg!(num_blocks);
+
+        let mut padded = vec![];
+        for _ in 0..block_size_in_bytes * 8 * num_blocks {
+            padded.push(self.add_virtual_bool_target_safe());
+        }
+
+        // register input
+        for i in 0..input_len_in_bytes * 8 {
+            self.connect(padded[i].target, input[i].target);
+        }
+
+        // append 0x01 = 1000 0000 after the last input
+        let true_target = self.constant_bool(true);
+        self.connect(padded[input_len_in_bytes * 8].target, true_target.target);
+
+        // pad 0s
+        let false_target = self.constant_bool(false);
+        let last_index = padded.len() - 1;
+        for i in input_len_in_bytes * 8 + 1..last_index {
+            self.connect(padded[i].target, false_target.target);
+        }
+
+        // xor 0x80 = 0000 0001 with the last byte.
+        // however the last bit is ensured to be 0, so just fill 1.
+        self.connect(padded[last_index].target, true_target.target);
+
+        let mut m = [(); 25].map(|_| U64Target::new(self));
+        for i in 0..1600 {
+            let word = i / 64;
+            let bit = i % 64;
+            self.connect(m[word].bits[bit].target, false_target.target);
+        }
+
+        for i in 0..num_blocks {
+            for j in 0..block_size_in_bytes * 8 {
+                let word = j / 64;
+                let bit = j % 64;
+                let xor_t = xor_circuit(
+                    m[word].bits[bit],
+                    padded[i * block_size_in_bytes * 8 + j],
+                    self,
+                );
+                m[word].bits[bit] = xor_t;
+            }
+            m = self.keccak_f(m);
+        }
+
+        let mut z = Vec::new();
+        for i in 0..256 {
+            let new_target = self.add_virtual_bool_target_safe();
+            let word = i / 64;
+            let bit = i % 64;
+            self.connect(new_target.target, m[word].bits[bit].target);
+            z.push(new_target);
+        }
+
+        z
     }
 }
 
@@ -143,8 +207,6 @@ mod tests {
     use std::time::Instant;
 
     use crate::field::goldilocks_field::GoldilocksField;
-    use crate::gates::keccak256::STATE_SIZE;
-    use crate::hash::u64_target::U64Target;
     use crate::iop::witness::{PartialWitness, WitnessWrite};
     use crate::plonk::circuit_builder::CircuitBuilder;
     use crate::plonk::circuit_data::CircuitConfig;
@@ -265,16 +327,21 @@ mod tests {
 
     #[test]
     fn test_keccak_circuit_builder() {
-        let input = "bb45f489bea73ef400b0ef4cd65dcec3565b0fd75c6eb248f1fefc84dd216650327e5a5c9b02ed7ce898f8ecb2e045cded87742a7723e7fddd9ac96c8aa70f4601000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
-        let expected_output = "61060054a4f8cd82609992a7604a95c9165bc95ae016a5299dd7d400dddbea9a3069922d826066fae8aad9aac3d937d6b6db11d4e3ce7663ef4236ca2f1a97a3de6259030506c8f50dcec6588ba1e7598a5f39e74f8f858f3fc04a371d52d761cb369205487758026a035dc5edd42a6bb4f1cc84c2f5a4f7915993a7b209935c40a06104fc2d4d3e337a79a6671f69fb0b3a14ccdf72f66f59828ab0f43bedab3622aa17746d3e536b9bd39974f215916563a5ed55d944d6137ce8cf03677e57bc75e502054f51b0";
+        let input = "8f54f1c2d0eb5771cd5bf67a6689fcd6eed9444d91a39e5ef32a9b4ae5ca14ff8f54f1c2d0eb5771cd5bf67a6689fcd6eed9444d91a39e5ef32a9b4ae5ca14ff";
+        let output = "c38d4cf2aeb3e65177c5d58e2afed87a17116190182829e59d3f8f8d801469c1";
 
         let config = CircuitConfig::standard_keccak_config();
         // let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
 
-        let targets = (0..10)
+        let input_bits = hex_str_to_bits(input).unwrap();
+        let output_bits = hex_str_to_bits(output).unwrap();
+        let targets = (0..1)
             .map(|_| {
-                let inputs_t = [(); STATE_SIZE].map(|_| U64Target::new(&mut builder));
+                let mut inputs_t = vec![];
+                for b in input_bits.iter() {
+                    inputs_t.push(builder.constant_bool(*b));
+                }
                 let outputs_t = builder.keccak256(inputs_t.clone());
 
                 (inputs_t, outputs_t)
@@ -284,14 +351,9 @@ mod tests {
         let keccak_circuit_data = builder.build::<C>();
 
         let mut pw = PartialWitness::new();
-        for (inputs_t, outputs_t) in targets {
-            let input_bits = hex_str_to_bits(input).unwrap();
-            let output_bits = hex_str_to_bits(expected_output).unwrap();
-            for ((input_t, output_t), (i, o)) in inputs_t.iter().zip(outputs_t.iter()).zip(input_bits.chunks(64).zip(output_bits.chunks(64))) {
-                // let bits: [bool; 64] = [(); 64].map(|_| rand::random());
-                // inputs[i].set_witness(bits.to_vec(), &mut pw);
-                input_t.set_witness(i.to_vec(), &mut pw);
-                output_t.set_witness(o.to_vec(), &mut pw);
+        for (_inputs_t, outputs_t) in targets {
+            for i in 0..256 {
+                pw.set_bool_target(outputs_t[i], output_bits[i]);
             }
         }
 
