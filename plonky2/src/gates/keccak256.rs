@@ -626,7 +626,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for Keccak
             out_buffer.set_wires(tmp2_wires, tmp2);
         }
 
-        let outputs = calc_keccak_chi(theta.try_into().unwrap());
+        let outputs = calc_keccak_chi(bs);
 
         for (i, out) in outputs.iter().enumerate() {
             let out_wires = Keccak256RoundGate::<F, D>::wires_output(i)
