@@ -76,14 +76,10 @@ fn rotate_u64(y: usize) -> Vec<usize> {
     res
 }
 
-fn rotl<F: Field>(x: &[F], n: usize) -> Vec<F> {
-    let rotate = rotate_u64(n);
-    let mut output = vec![];
-    for r in rotate {
-        output.push(x[r]);
-    }
+fn rotl<T: Copy>(x: [T; 64], n: usize) -> [T; 64] {
+    let rotate: [_; 64] = rotate_u64(n).try_into().unwrap();
 
-    output
+    rotate.map(|r| x[r])
 }
 
 pub fn calc_keccak_theta<F: Field>(inputs: [[F; 64]; STATE_SIZE]) -> [[F; 64]; WIDTH] {
@@ -144,15 +140,22 @@ impl<F: RichField + Extendable<D>, const D: usize> Keccak256RoundGate<F, D> {
         ((STATE_SIZE + i) * 64)..((STATE_SIZE + i + 1) * 64)
     }
 
-    pub fn wires_output(i: usize) -> Range<usize> {
+    pub fn wires_tmp2(i: usize) -> Range<usize> {
         assert!(i < STATE_SIZE);
 
         ((STATE_SIZE + WIDTH + i) * 64)..((STATE_SIZE + WIDTH + i + 1) * 64)
     }
 
+    pub fn wires_output(i: usize) -> Range<usize> {
+        assert!(i < STATE_SIZE);
+
+        // ((STATE_SIZE + WIDTH + i) * 64)..((STATE_SIZE + WIDTH + i + 1) * 64)
+        ((2 * STATE_SIZE + WIDTH + i) * 64)..((2 * STATE_SIZE + WIDTH + i + 1) * 64)
+    }
+
     pub fn end() -> usize {
+        // (2 * STATE_SIZE + WIDTH) * 64
         (2 * STATE_SIZE + WIDTH) * 64
-        // (2 * STATE_SIZE) * 64
     }
 }
 
@@ -175,12 +178,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             .collect::<Vec<_>>();
 
         let tmps = (0..WIDTH)
-            .map(|i| vars.local_wires[Self::wires_tmp(i)].to_vec())
+            .map(|i| vars.local_wires[Self::wires_tmp(i)].try_into().unwrap())
+            .collect::<Vec<[_; 64]>>();
+
+        let tmps2 = (0..STATE_SIZE)
+            .map(|i| vars.local_wires[Self::wires_tmp2(i)].to_vec())
             .collect::<Vec<_>>();
 
-        let outputs = (0..STATE_SIZE)
-            .map(|i| vars.local_wires[Self::wires_output(i)].to_vec())
-            .collect::<Vec<_>>();
+        // let outputs = (0..STATE_SIZE)
+        //     .map(|i| vars.local_wires[Self::wires_output(i)].to_vec())
+        //     .collect::<Vec<_>>();
 
         let mut constraints = vec![];
 
@@ -190,13 +197,13 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
                 let xor012 = xor(xor01, inputs[x + 2 * 5][i]);
                 let xor0123 = xor(xor012, inputs[x + 3 * 5][i]);
                 let xor01234 = xor(xor0123, inputs[x + 4 * 5][i]);
-                constraints.push(tmps[x][i] - xor01234);
+                constraints.push(xor01234 - tmps[x][i]);
             }
         }
 
         let mut d = vec![];
         for x in 0..5 {
-            let rot_c = rotl(&tmps[(x + 1) % 5], 1);
+            let rot_c = rotl(tmps[(x + 1) % 5], 1);
             let mut d_bits = vec![];
             for i in 0..64 {
                 d_bits.push(xor(tmps[(x + 4) % 5][i], rot_c[i]));
@@ -204,14 +211,14 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             d.push(d_bits);
         }
 
-        let mut theta = vec![];
+        let mut theta: Vec<[_; 64]> = vec![];
         for y in 0..5 {
             for x in 0..5 {
                 let mut theta_bits = vec![];
                 for i in 0..64 {
                     theta_bits.push(xor(inputs[x + y * 5][i], d[x][i]));
                 }
-                theta.push(theta_bits);
+                theta.push(theta_bits.try_into().unwrap());
             }
         }
 
@@ -219,25 +226,32 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
         let mut b_words: [Option<[_; 64]>; 25] = [(); 25].map(|_| None);
         for y in 0..5 {
             for x in 0..5 {
-                let rot_theta = rotl(&theta[x + y * 5], ROTR[x + y * 5]);
+                let rot_theta = rotl(theta[x + y * 5], ROTR[x + y * 5]);
                 
-                b_words[y + ((2 * x + 3 * y) % 5) * 5] = Some(rot_theta.try_into().unwrap());
+                b_words[y + ((2 * x + 3 * y) % 5) * 5] = Some(rot_theta);
             }
         }
         let bs = b_words.map(|x| x.unwrap());
-
         for y in 0..5 {
             for x in 0..5 {
                 for i in 0..64 {
-                    let chi = xor_and_not(
-                        bs[x + y * 5][i],
-                        bs[(x + 2) % 5 + y * 5][i],
-                        bs[(x + 1) % 5 + y * 5][i],
-                    );
-                    constraints.push(outputs[x + y * 5][i] - chi);
+                    constraints.push(bs[x + y * 5][i] - tmps2[x + y * 5][i]);
                 }
             }
         }
+
+        // for y in 0..5 {
+        //     for x in 0..5 {
+        //         for i in 0..64 {
+        //             let chi = xor_and_not(
+        //                 tmps2[x + y * 5][i],
+        //                 tmps2[(x + 2) % 5 + y * 5][i],
+        //                 tmps2[(x + 1) % 5 + y * 5][i],
+        //             );
+        //             constraints.push(chi - outputs[x + y * 5][i]);
+        //         }
+        //     }
+        // }
 
         constraints
     }
@@ -259,17 +273,25 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             .map(|i| {
                 Self::wires_tmp(i)
                     .map(|j| vars.local_wires[j])
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>().try_into().unwrap()
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<[_; 64]>>();
 
-        let outputs = (0..STATE_SIZE)
+        let tmps2 = (0..STATE_SIZE)
             .map(|i| {
-                Self::wires_output(i)
+                Self::wires_tmp2(i)
                     .map(|j| vars.local_wires[j])
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
+
+        // let outputs = (0..STATE_SIZE)
+        //     .map(|i| {
+        //         Self::wires_output(i)
+        //             .map(|j| vars.local_wires[j])
+        //             .collect::<Vec<_>>()
+        //     })
+        //     .collect::<Vec<_>>();
 
         for x in 0..5 {
             for i in 0..64 {
@@ -277,13 +299,13 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
                 let xor012 = xor(xor01, inputs[x + 2 * 5][i]);
                 let xor0123 = xor(xor012, inputs[x + 3 * 5][i]);
                 let xor01234 = xor(xor0123, inputs[x + 4 * 5][i]);
-                yield_constr.one(tmps[x][i] - xor01234);
+                yield_constr.one(xor01234 - tmps[x][i]);
             }
         }
 
         let mut d = vec![];
         for x in 0..5 {
-            let rot_c = rotl(&tmps[(x + 1) % 5], 1);
+            let rot_c = rotl(tmps[(x + 1) % 5], 1);
             let mut d_bits = vec![];
             for i in 0..64 {
                 d_bits.push(xor(tmps[(x + 4) % 5][i], rot_c[i]));
@@ -291,14 +313,14 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             d.push(d_bits);
         }
 
-        let mut theta = vec![];
+        let mut theta: Vec<[_; 64]> = vec![];
         for y in 0..5 {
             for x in 0..5 {
                 let mut theta_bits = vec![];
                 for i in 0..64 {
                     theta_bits.push(xor(inputs[x + y * 5][i], d[x][i]));
                 }
-                theta.push(theta_bits);
+                theta.push(theta_bits.try_into().unwrap());
             }
         }
 
@@ -306,26 +328,33 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
         let mut b_words: [Option<[_; 64]>; 25] = [(); 25].map(|_| None);
         for y in 0..5 {
             for x in 0..5 {
-                let rot_theta = rotl(&theta[x + y * 5], ROTR[x + y * 5]);
+                let rot_theta = rotl(theta[x + y * 5], ROTR[x + y * 5]);
                 
-                b_words[y + ((2 * x + 3 * y) % 5) * 5] = Some(rot_theta.try_into().unwrap());
+                b_words[y + ((2 * x + 3 * y) % 5) * 5] = Some(rot_theta);
             }
         }
         let bs = b_words.map(|x| x.unwrap());
-
         for y in 0..5 {
             for x in 0..5 {
                 for i in 0..64 {
-                    let chi = xor_and_not(
-                        bs[x + y * 5][i],
-                        bs[(x + 2) % 5 + y * 5][i],
-                        bs[(x + 1) % 5 + y * 5][i],
-                    );
-                    yield_constr.one(outputs[x + y * 5][i] - chi);
-                    // tmps[x + y * 5][i] = chi;
+                    yield_constr.one(bs[x + y * 5][i] - tmps2[x + y * 5][i]);
                 }
             }
         }
+
+        // for y in 0..5 {
+        //     for x in 0..5 {
+        //         for i in 0..64 {
+        //             let chi = xor_and_not(
+        //                 tmps2[x + y * 5][i],
+        //                 tmps2[(x + 2) % 5 + y * 5][i],
+        //                 tmps2[(x + 1) % 5 + y * 5][i],
+        //             );
+        //             yield_constr.one(chi - outputs[x + y * 5][i]);
+        //             // tmps[x + y * 5][i] = chi;
+        //         }
+        //     }
+        // }
     }
 
     fn eval_unfiltered_circuit(
@@ -359,10 +388,10 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        let outputs: [_; STATE_SIZE] = (0..STATE_SIZE)
+        let tmps2: [_; STATE_SIZE] = (0..STATE_SIZE)
             .map(|i| {
                 U64AlgebraTarget(
-                    Self::wires_output(i)
+                    Self::wires_tmp2(i)
                         .map(|j| vars.local_wires[j])
                         .collect::<Vec<_>>()
                         .try_into()
@@ -372,6 +401,19 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
+        // let outputs: [_; STATE_SIZE] = (0..STATE_SIZE)
+        //     .map(|i| {
+        //         U64AlgebraTarget(
+        //             Self::wires_output(i)
+        //                 .map(|j| vars.local_wires[j])
+        //                 .collect::<Vec<_>>()
+        //                 .try_into()
+        //                 .unwrap(),
+        //         )
+        //     })
+        //     .collect::<Vec<_>>()
+        //     .try_into()
+        //     .unwrap();
 
         let mut constraints = vec![];
 
@@ -410,20 +452,20 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
                 // Collect output wires.
                 let out_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_output());
                 // builder.connect_extension(out_wire, o);
-                constraints.push(builder.sub_extension(o, out_wire));
+                constraints.push(builder.sub_extension(out_wire, o));
             }
         }
 
-        let mut ds = vec![];
+        let mut d = vec![];
         for x in 0..5 {
-            let rot_c = tmps[(x + 1) % 5].rotl(1);
-            ds.push(builder.xor_u64_algebra(tmps[(x + 4) % 5], rot_c));
+            let rot_c = rotl(tmps[(x + 1) % 5].0, 1).into();
+            d.push(builder.xor_u64_algebra(tmps[(x + 4) % 5], rot_c));
         }
 
         let mut theta = vec![];
         for y in 0..5 {
             for x in 0..5 {
-                theta.push(builder.xor_u64_algebra(inputs[x + y * 5], ds[x]));
+                theta.push(builder.xor_u64_algebra(inputs[x + y * 5], d[x]));
             }
         }
 
@@ -431,43 +473,50 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
         let mut b_words: [Option<U64AlgebraTarget<D>>; 25] = [(); 25].map(|_| None);
         for y in 0..5 {
             for x in 0..5 {
-                let rot_self = theta[x + y * 5].rotl(ROTR[x + y * 5]);
+                let rot_self = rotl(theta[x + y * 5].0, ROTR[x + y * 5]).into();
                 
                 b_words[y + ((2 * x + 3 * y) % 5) * 5] = Some(rot_self);
             }
         }
         let bs = b_words.map(|x| x.unwrap());
-
-        for y in 0..WIDTH {
-            for x in 0..WIDTH {
-                for (((a, b), c), o) in bs[x + y * 5]
-                    .into_iter()
-                    .zip(bs[(x + 2) % 5 + y * 5].into_iter())
-                    .zip(bs[(x + 1) % 5 + y * 5].into_iter())
-                    .zip(outputs[x + y * 5].into_iter())
-                {
-                    let gate_type = XorAndNotGate::<F, D>::new();
-                    let gate = builder.add_gate(gate_type, vec![]);
-
-                    // Route input wires.
-                    let a_wire =
-                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_a());
-                    builder.connect_extension(a_wire, a);
-                    let b_wire =
-                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_b());
-                    builder.connect_extension(b_wire, b);
-                    let c_wire =
-                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_c());
-                    builder.connect_extension(c_wire, c);
-
-                    // Collect output wires.
-                    let out_wire =
-                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_output());
-                    // builder.connect_extension(out_wire, o);
-                    constraints.push(builder.sub_extension(o, out_wire));
+        for y in 0..5 {
+            for x in 0..5 {
+                for i in 0..64 {
+                    constraints.push(builder.sub_extension(bs[x + y * 5][i], tmps2[x + y * 5][i]));
                 }
             }
         }
+
+        // for y in 0..WIDTH {
+        //     for x in 0..WIDTH {
+        //         for (((a, b), c), o) in tmps2[x + y * 5]
+        //             .into_iter()
+        //             .zip(tmps2[(x + 2) % 5 + y * 5].into_iter())
+        //             .zip(tmps2[(x + 1) % 5 + y * 5].into_iter())
+        //             .zip(outputs[x + y * 5].into_iter())
+        //         {
+        //             let gate_type = XorAndNotGate::<F, D>::new();
+        //             let gate = builder.add_gate(gate_type, vec![]);
+
+        //             // Route input wires.
+        //             let a_wire =
+        //                 ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_a());
+        //             builder.connect_extension(a_wire, a);
+        //             let b_wire =
+        //                 ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_b());
+        //             builder.connect_extension(b_wire, b);
+        //             let c_wire =
+        //                 ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_c());
+        //             builder.connect_extension(c_wire, c);
+
+        //             // Collect output wires.
+        //             let out_wire =
+        //                 ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_output());
+        //             // builder.connect_extension(out_wire, o);
+        //             constraints.push(builder.sub_extension(out_wire, o));
+        //         }
+        //     }
+        // }
 
         constraints
     }
@@ -489,10 +538,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
     }
 
     fn degree(&self) -> usize {
-        8
+        5
     }
 
     fn num_constraints(&self) -> usize {
+        // (2 * STATE_SIZE + WIDTH) * 64
         (STATE_SIZE + WIDTH) * 64
     }
 }
@@ -534,16 +584,16 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for Keccak
 
         let c = calc_keccak_theta(inputs);
 
-        for (i, tmp) in c.into_iter().enumerate() {
+        for (i, tmp) in c.iter().enumerate() {
             let tmp_wires = Keccak256RoundGate::<F, D>::wires_tmp(i)
                 .map(local_wire)
                 .collect::<Vec<_>>();
-            out_buffer.set_wires(tmp_wires, &tmp);
+            out_buffer.set_wires(tmp_wires, tmp);
         }
 
         let mut d = vec![];
         for x in 0..5 {
-            let rot_c = rotl(&c[(x + 1) % 5], 1);
+            let rot_c = rotl(c[(x + 1) % 5], 1);
             let mut d_bits = vec![];
             for i in 0..64 {
                 d_bits.push(xor(c[(x + 4) % 5][i], rot_c[i]));
@@ -566,21 +616,27 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for Keccak
         let mut b_words: [Option<[_; 64]>; 25] = [(); 25].map(|_| None);
         for y in 0..5 {
             for x in 0..5 {
-                let rot_theta = rotl(&theta[x + y * 5], ROTR[x + y * 5]);
+                let rot_theta = rotl(theta[x + y * 5], ROTR[x + y * 5]);
                 
-                b_words[y + ((2 * x + 3 * y) % 5) * 5] = Some(rot_theta.try_into().unwrap());
+                b_words[y + ((2 * x + 3 * y) % 5) * 5] = Some(rot_theta);
             }
         }
         let bs = b_words.map(|x| x.unwrap());
-
-        let outputs = calc_keccak_chi(bs);
-
-        for (i, out) in outputs.into_iter().enumerate() {
-            let out_wires = Keccak256RoundGate::<F, D>::wires_output(i)
+        for (i, tmp2) in bs.iter().enumerate() {
+            let tmp2_wires = Keccak256RoundGate::<F, D>::wires_tmp2(i)
                 .map(local_wire)
                 .collect::<Vec<_>>();
-            out_buffer.set_wires(out_wires, &out);
+            out_buffer.set_wires(tmp2_wires, tmp2);
         }
+
+        // let outputs = calc_keccak_chi(theta.try_into().unwrap());
+
+        // for (i, out) in outputs.iter().enumerate() {
+        //     let out_wires = Keccak256RoundGate::<F, D>::wires_output(i)
+        //         .map(local_wire)
+        //         .collect::<Vec<_>>();
+        //     out_buffer.set_wires(out_wires, out);
+        // }
     }
 
     fn serialize(&self, dst: &mut Vec<u8>) -> IoResult<()> {
@@ -617,6 +673,8 @@ mod tests {
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
         let gate = Keccak256RoundGate::<F, D>::new();
-        test_eval_fns::<F, C, _, D>(gate)
+        test_eval_fns::<F, C, _, D>(gate).unwrap();
+
+        Ok(())
     }
 }

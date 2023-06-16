@@ -119,6 +119,14 @@ pub fn test_eval_fns<
     let evals_base = gate.eval_unfiltered_base_batch(vars_base_batch);
     let evals = gate.eval_unfiltered(vars);
     // This works because we have a batch of 1.
+    for (i, (l, r)) in evals.clone().into_iter().zip(evals_base.clone()
+        .into_iter()
+        .map(F::Extension::from_basefield)
+        .collect::<Vec<_>>()).enumerate() {
+            assert_eq!(
+                l, r, "{i}: {l} != {r}",
+            );
+    }
     ensure!(
         evals
             == evals_base

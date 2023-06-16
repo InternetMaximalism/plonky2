@@ -267,6 +267,18 @@ impl<const D: usize> std::ops::Deref for U64AlgebraTarget<D> {
     }
 }
 
+impl<const D: usize> std::ops::DerefMut for U64AlgebraTarget<D> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<const D: usize> From<[ExtensionTarget<D>; 64]> for U64AlgebraTarget<D> {
+    fn from(c: [ExtensionTarget<D>; 64]) -> Self {
+        Self(c)
+    }
+}
+
 impl<const D: usize> U64AlgebraTarget<D> {
     pub fn set_witness<F: RichField + Extendable<D>>(
         &self,
@@ -276,15 +288,6 @@ impl<const D: usize> U64AlgebraTarget<D> {
         for i in 0..64 {
             pw.set_extension_target(self[i], witness[i]);
         }
-    }
-
-    pub fn rotl(&self, n: usize) -> Self {
-        let mut result = vec![];
-        for i in 0..64 {
-            result.push(self[(i + n) % 64]);
-        }
-
-        Self(result.try_into().unwrap())
     }
 }
 
