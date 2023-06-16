@@ -18,6 +18,7 @@ use crate::iop::target::Target;
 use crate::iop::wire::Wire;
 use crate::iop::witness::{PartitionWitness, Witness, WitnessWrite};
 use crate::plonk::circuit_builder::CircuitBuilder;
+use crate::plonk::plonk_common::{reduce_with_powers, reduce_with_powers_ext_circuit};
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
 use crate::util::serialization::{Buffer, IoResult, Read, Write};
 
@@ -180,13 +181,21 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
         let mut constraints = vec![];
 
         for x in 0..5 {
+            let mut c = vec![];
             for i in 0..64 {
                 let xor01 = xor(inputs[x][i], inputs[x + 5][i]);
                 let xor012 = xor(xor01, inputs[x + 2 * 5][i]);
                 let xor0123 = xor(xor012, inputs[x + 3 * 5][i]);
                 let xor01234 = xor(xor0123, inputs[x + 4 * 5][i]);
-                constraints.push(xor01234 - tmps[x][i]);
+                c.push(xor01234);
             }
+
+            let c_lo = reduce_with_powers(&c[0..32], F::Extension::TWO);
+            let c_hi = reduce_with_powers(&c[32..64], F::Extension::TWO);
+            let tmps_x_lo = reduce_with_powers(&tmps[x][0..32], F::Extension::TWO);
+            let tmps_x_hi = reduce_with_powers(&tmps[x][32..64], F::Extension::TWO);
+            constraints.push(c_lo - tmps_x_lo);
+            constraints.push(c_hi - tmps_x_hi);
         }
 
         let mut d = vec![];
@@ -223,12 +232,20 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
 
         for y in 0..5 {
             for x in 0..5 {
+                let mut b_and_not_c = vec![];
+                let mut a_xor_o = vec![];
                 for i in 0..64 {
-                    let b_and_not_c =
-                        and_not(bs[(x + 2) % 5 + y * 5][i], bs[(x + 1) % 5 + y * 5][i]);
-                    let a_xor_output = xor(bs[x + y * 5][i], outputs[x + y * 5][i]);
-                    constraints.push(b_and_not_c - a_xor_output);
+                    b_and_not_c.push(
+                        and_not(bs[(x + 2) % 5 + y * 5][i], bs[(x + 1) % 5 + y * 5][i]));
+                    a_xor_o.push(xor(bs[x + y * 5][i], outputs[x + y * 5][i]));
                 }
+
+                let b_and_not_c_lo = reduce_with_powers(&b_and_not_c[0..32], F::Extension::TWO);
+                let b_and_not_c_hi = reduce_with_powers(&b_and_not_c[32..64], F::Extension::TWO);
+                let a_xor_o_lo = reduce_with_powers(&a_xor_o[0..32], F::Extension::TWO);
+                let a_xor_o_hi = reduce_with_powers(&a_xor_o[32..64], F::Extension::TWO);
+                constraints.push(b_and_not_c_lo - a_xor_o_lo);
+                constraints.push(b_and_not_c_hi - a_xor_o_hi);
             }
         }
 
@@ -267,13 +284,21 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             .collect::<Vec<_>>();
 
         for x in 0..5 {
+            let mut c = vec![];
             for i in 0..64 {
                 let xor01 = xor(inputs[x][i], inputs[x + 5][i]);
                 let xor012 = xor(xor01, inputs[x + 2 * 5][i]);
                 let xor0123 = xor(xor012, inputs[x + 3 * 5][i]);
                 let xor01234 = xor(xor0123, inputs[x + 4 * 5][i]);
-                yield_constr.one(xor01234 - tmps[x][i]);
+                c.push(xor01234);
             }
+
+            let c_lo = reduce_with_powers(&c[0..32], F::TWO);
+            let c_hi = reduce_with_powers(&c[32..64], F::TWO);
+            let tmps_x_lo = reduce_with_powers(&tmps[x][0..32], F::TWO);
+            let tmps_x_hi = reduce_with_powers(&tmps[x][32..64], F::TWO);
+            yield_constr.one(c_lo - tmps_x_lo);
+            yield_constr.one(c_hi - tmps_x_hi);
         }
 
         let mut d = vec![];
@@ -310,12 +335,19 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
 
         for y in 0..5 {
             for x in 0..5 {
+                let mut b_and_not_c = vec![];
+                let mut a_xor_o = vec![];
                 for i in 0..64 {
-                    let b_and_not_c =
-                        and_not(bs[(x + 2) % 5 + y * 5][i], bs[(x + 1) % 5 + y * 5][i]);
-                    let a_xor_output = xor(bs[x + y * 5][i], outputs[x + y * 5][i]);
-                    yield_constr.one(b_and_not_c - a_xor_output);
+                    b_and_not_c.push(and_not(bs[(x + 2) % 5 + y * 5][i], bs[(x + 1) % 5 + y * 5][i]));
+                    a_xor_o.push(xor(bs[x + y * 5][i], outputs[x + y * 5][i]));
                 }
+
+                let b_and_not_c_lo = reduce_with_powers(&b_and_not_c[0..32], F::TWO);
+                let b_and_not_c_hi = reduce_with_powers(&b_and_not_c[32..64], F::TWO);
+                let a_xor_o_lo = reduce_with_powers(&a_xor_o[0..32], F::TWO);
+                let a_xor_o_hi = reduce_with_powers(&a_xor_o[32..64], F::TWO);
+                yield_constr.one(b_and_not_c_lo - a_xor_o_lo);
+                yield_constr.one(b_and_not_c_hi - a_xor_o_hi);
             }
         }
     }
@@ -365,16 +397,18 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             .try_into()
             .unwrap();
 
+        let two = builder.constant(F::TWO);
+
         let mut constraints = vec![];
 
         for x in 0..WIDTH {
-            for (((((i0, i1), i2), i3), i4), o) in inputs[x]
+            let mut c = vec![];
+            for ((((i0, i1), i2), i3), i4) in inputs[x]
                 .into_iter()
                 .zip(inputs[x + 5].into_iter())
                 .zip(inputs[x + 2 * 5].into_iter())
                 .zip(inputs[x + 3 * 5].into_iter())
                 .zip(inputs[x + 4 * 5].into_iter())
-                .zip(tmps[x].into_iter())
             {
                 // let xor01 = builder.xor_extension(i0, i1);
                 // let xor012 = builder.xor_extension(xor01, i2);
@@ -401,9 +435,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
 
                 // Collect output wires.
                 let out_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_output());
-                // builder.connect_extension(out_wire, o);
-                constraints.push(builder.sub_extension(out_wire, o));
+
+                c.push(out_wire);
             }
+
+            let c_lo = reduce_with_powers_ext_circuit(builder, &c[0..32], two);
+            let c_hi = reduce_with_powers_ext_circuit(builder, &c[32..64], two);
+            let tmps_x_lo = reduce_with_powers_ext_circuit(builder, &tmps[x][0..32], two);
+            let tmps_x_hi = reduce_with_powers_ext_circuit(builder, &tmps[x][32..64], two);
+            constraints.push(builder.sub_extension(c_lo, tmps_x_lo));
+            constraints.push(builder.sub_extension(c_hi, tmps_x_hi));
         }
 
         let mut d = vec![];
@@ -432,6 +473,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
 
         for y in 0..WIDTH {
             for x in 0..WIDTH {
+                let mut b_and_not_c = vec![];
+                let mut a_xor_o = vec![];
                 for (((a, b), c), o) in bs[x + y * 5]
                     .into_iter()
                     .zip(bs[(x + 2) % 5 + y * 5].into_iter())
@@ -457,11 +500,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
                     //     ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_output())
                     // };
 
-                    let b_and_not_c = builder.and_not_extension(b, c); // deg 6
-                    let a_xor_output = builder.xor_extension(a, o); // deg 4
-
-                    constraints.push(builder.sub_extension(b_and_not_c, a_xor_output));
+                    b_and_not_c.push(builder.and_not_extension(b, c)); // deg 6
+                    a_xor_o.push(builder.xor_extension(a, o)); // deg 4
                 }
+
+                let b_and_not_c_lo = reduce_with_powers_ext_circuit(builder, &b_and_not_c[0..32], two);
+                let b_and_not_c_hi = reduce_with_powers_ext_circuit(builder, &b_and_not_c[32..64], two);
+                let a_xor_o_lo = reduce_with_powers_ext_circuit(builder, &a_xor_o[0..32], two);
+                let a_xor_o_hi = reduce_with_powers_ext_circuit(builder, &a_xor_o[32..64], two);
+                constraints.push(builder.sub_extension(b_and_not_c_lo, a_xor_o_lo));
+                constraints.push(builder.sub_extension(b_and_not_c_hi, a_xor_o_hi));
             }
         }
 
@@ -489,7 +537,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
     }
 
     fn num_constraints(&self) -> usize {
-        (STATE_SIZE + WIDTH) * 64
+        (STATE_SIZE + WIDTH) * 2
     }
 }
 

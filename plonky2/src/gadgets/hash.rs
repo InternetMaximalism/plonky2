@@ -96,7 +96,12 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         for i in 0..STATE_SIZE {
             let in_wire = U64Target {
                 bits: Keccak256RoundGate::<F, D>::wires_input(i)
-                    .map(|v| BoolTarget::new_unsafe(Target::wire(gate, v)))
+                    .map(|v| {
+                        let t = BoolTarget::new_unsafe(Target::wire(gate, v));
+                        self.assert_bool(t);
+
+                        t
+                    })
                     .collect::<Vec<_>>(),
             };
             inputs[i].connect(&in_wire, self);
@@ -106,7 +111,12 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         (0..5)
             .map(|i| U64Target {
                 bits: Keccak256RoundGate::<F, D>::wires_output(i)
-                    .map(|v| BoolTarget::new_unsafe(Target::wire(gate, v)))
+                    .map(|v| {
+                        let t = BoolTarget::new_unsafe(Target::wire(gate, v));
+                        self.assert_bool(t);
+
+                        t
+                    })
                     .collect::<Vec<_>>(),
             })
             .collect::<Vec<_>>()
