@@ -141,7 +141,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let block_size_in_bytes = 136; // in bytes
         let input_len_in_bytes = input.len() / 8;
         let num_blocks = input_len_in_bytes / block_size_in_bytes + 1;
-        dbg!(num_blocks);
 
         let mut padded = vec![];
         for _ in 0..block_size_in_bytes * 8 * num_blocks {
