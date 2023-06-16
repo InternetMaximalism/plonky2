@@ -11,7 +11,7 @@ use crate::field::types::Field;
 use crate::gates::gate::Gate;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
-use crate::hash::u64_target::{U64AlgebraTarget, U64Target};
+use crate::hash::u64_target::U64AlgebraTarget;
 use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGeneratorRef};
 use crate::iop::target::Target;
@@ -154,8 +154,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Keccak256RoundGate<F, D> {
     }
 
     pub fn end() -> usize {
-        // (2 * STATE_SIZE + WIDTH) * 64
-        (2 * STATE_SIZE + WIDTH) * 64
+        (3 * STATE_SIZE + WIDTH) * 64
     }
 }
 
@@ -185,9 +184,9 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             .map(|i| vars.local_wires[Self::wires_tmp2(i)].to_vec())
             .collect::<Vec<_>>();
 
-        // let outputs = (0..STATE_SIZE)
-        //     .map(|i| vars.local_wires[Self::wires_output(i)].to_vec())
-        //     .collect::<Vec<_>>();
+        let outputs = (0..STATE_SIZE)
+            .map(|i| vars.local_wires[Self::wires_output(i)].to_vec())
+            .collect::<Vec<_>>();
 
         let mut constraints = vec![];
 
@@ -240,18 +239,18 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             }
         }
 
-        // for y in 0..5 {
-        //     for x in 0..5 {
-        //         for i in 0..64 {
-        //             let chi = xor_and_not(
-        //                 tmps2[x + y * 5][i],
-        //                 tmps2[(x + 2) % 5 + y * 5][i],
-        //                 tmps2[(x + 1) % 5 + y * 5][i],
-        //             );
-        //             constraints.push(chi - outputs[x + y * 5][i]);
-        //         }
-        //     }
-        // }
+        for y in 0..5 {
+            for x in 0..5 {
+                for i in 0..64 {
+                    let chi = xor_and_not(
+                        tmps2[x + y * 5][i],
+                        tmps2[(x + 2) % 5 + y * 5][i],
+                        tmps2[(x + 1) % 5 + y * 5][i],
+                    );
+                    constraints.push(chi - outputs[x + y * 5][i]);
+                }
+            }
+        }
 
         constraints
     }
@@ -285,13 +284,13 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             })
             .collect::<Vec<_>>();
 
-        // let outputs = (0..STATE_SIZE)
-        //     .map(|i| {
-        //         Self::wires_output(i)
-        //             .map(|j| vars.local_wires[j])
-        //             .collect::<Vec<_>>()
-        //     })
-        //     .collect::<Vec<_>>();
+        let outputs = (0..STATE_SIZE)
+            .map(|i| {
+                Self::wires_output(i)
+                    .map(|j| vars.local_wires[j])
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
 
         for x in 0..5 {
             for i in 0..64 {
@@ -342,19 +341,18 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             }
         }
 
-        // for y in 0..5 {
-        //     for x in 0..5 {
-        //         for i in 0..64 {
-        //             let chi = xor_and_not(
-        //                 tmps2[x + y * 5][i],
-        //                 tmps2[(x + 2) % 5 + y * 5][i],
-        //                 tmps2[(x + 1) % 5 + y * 5][i],
-        //             );
-        //             yield_constr.one(chi - outputs[x + y * 5][i]);
-        //             // tmps[x + y * 5][i] = chi;
-        //         }
-        //     }
-        // }
+        for y in 0..5 {
+            for x in 0..5 {
+                for i in 0..64 {
+                    let chi = xor_and_not(
+                        tmps2[x + y * 5][i],
+                        tmps2[(x + 2) % 5 + y * 5][i],
+                        tmps2[(x + 1) % 5 + y * 5][i],
+                    );
+                    yield_constr.one(chi - outputs[x + y * 5][i]);
+                }
+            }
+        }
     }
 
     fn eval_unfiltered_circuit(
@@ -401,19 +399,19 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        // let outputs: [_; STATE_SIZE] = (0..STATE_SIZE)
-        //     .map(|i| {
-        //         U64AlgebraTarget(
-        //             Self::wires_output(i)
-        //                 .map(|j| vars.local_wires[j])
-        //                 .collect::<Vec<_>>()
-        //                 .try_into()
-        //                 .unwrap(),
-        //         )
-        //     })
-        //     .collect::<Vec<_>>()
-        //     .try_into()
-        //     .unwrap();
+        let outputs: [_; STATE_SIZE] = (0..STATE_SIZE)
+            .map(|i| {
+                U64AlgebraTarget(
+                    Self::wires_output(i)
+                        .map(|j| vars.local_wires[j])
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
 
         let mut constraints = vec![];
 
@@ -487,36 +485,36 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
             }
         }
 
-        // for y in 0..WIDTH {
-        //     for x in 0..WIDTH {
-        //         for (((a, b), c), o) in tmps2[x + y * 5]
-        //             .into_iter()
-        //             .zip(tmps2[(x + 2) % 5 + y * 5].into_iter())
-        //             .zip(tmps2[(x + 1) % 5 + y * 5].into_iter())
-        //             .zip(outputs[x + y * 5].into_iter())
-        //         {
-        //             let gate_type = XorAndNotGate::<F, D>::new();
-        //             let gate = builder.add_gate(gate_type, vec![]);
+        for y in 0..WIDTH {
+            for x in 0..WIDTH {
+                for (((a, b), c), o) in tmps2[x + y * 5]
+                    .into_iter()
+                    .zip(tmps2[(x + 2) % 5 + y * 5].into_iter())
+                    .zip(tmps2[(x + 1) % 5 + y * 5].into_iter())
+                    .zip(outputs[x + y * 5].into_iter())
+                {
+                    let gate_type = XorAndNotGate::<F, D>::new();
+                    let gate = builder.add_gate(gate_type, vec![]);
 
-        //             // Route input wires.
-        //             let a_wire =
-        //                 ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_a());
-        //             builder.connect_extension(a_wire, a);
-        //             let b_wire =
-        //                 ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_b());
-        //             builder.connect_extension(b_wire, b);
-        //             let c_wire =
-        //                 ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_c());
-        //             builder.connect_extension(c_wire, c);
+                    // Route input wires.
+                    let a_wire =
+                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_a());
+                    builder.connect_extension(a_wire, a);
+                    let b_wire =
+                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_b());
+                    builder.connect_extension(b_wire, b);
+                    let c_wire =
+                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_c());
+                    builder.connect_extension(c_wire, c);
 
-        //             // Collect output wires.
-        //             let out_wire =
-        //                 ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_output());
-        //             // builder.connect_extension(out_wire, o);
-        //             constraints.push(builder.sub_extension(out_wire, o));
-        //         }
-        //     }
-        // }
+                    // Collect output wires.
+                    let out_wire =
+                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_output());
+                    // builder.connect_extension(out_wire, o);
+                    constraints.push(builder.sub_extension(out_wire, o));
+                }
+            }
+        }
 
         constraints
     }
@@ -542,8 +540,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
     }
 
     fn num_constraints(&self) -> usize {
-        // (2 * STATE_SIZE + WIDTH) * 64
-        (STATE_SIZE + WIDTH) * 64
+        (2 * STATE_SIZE + WIDTH) * 64
     }
 }
 
@@ -629,14 +626,14 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F> for Keccak
             out_buffer.set_wires(tmp2_wires, tmp2);
         }
 
-        // let outputs = calc_keccak_chi(theta.try_into().unwrap());
+        let outputs = calc_keccak_chi(theta.try_into().unwrap());
 
-        // for (i, out) in outputs.iter().enumerate() {
-        //     let out_wires = Keccak256RoundGate::<F, D>::wires_output(i)
-        //         .map(local_wire)
-        //         .collect::<Vec<_>>();
-        //     out_buffer.set_wires(out_wires, out);
-        // }
+        for (i, out) in outputs.iter().enumerate() {
+            let out_wires = Keccak256RoundGate::<F, D>::wires_output(i)
+                .map(local_wire)
+                .collect::<Vec<_>>();
+            out_buffer.set_wires(out_wires, out);
+        }
     }
 
     fn serialize(&self, dst: &mut Vec<u8>) -> IoResult<()> {
