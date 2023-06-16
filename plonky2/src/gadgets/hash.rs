@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 
 use crate::field::extension::Extendable;
-use crate::gates::keccak256::{Keccak256RoundGate, STATE_SIZE, WIDTH};
+use crate::gates::keccak256::{Keccak256RoundGate, STATE_SIZE, WIDTH, ROUND_CONSTANTS};
 use crate::gates::keccak_chi::XorAndNotGate;
 use crate::gates::keccak_theta::Xor5Gate;
 use crate::hash::hash_types::{HashOutTarget, RichField};
-use crate::hash::u64_target::U64Target;
+use crate::hash::u64_target::{U64Target};
 use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::target::{BoolTarget, Target};
 use crate::plonk::circuit_builder::CircuitBuilder;
@@ -92,7 +92,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let gate = self.add_gate(gate_type, vec![]);
 
         // Route input wires.
-        // let inputs = inputs.as_ref();
         for i in 0..STATE_SIZE {
             let in_wire = U64Target {
                 bits: Keccak256RoundGate::<F, D>::wires_input(i)
@@ -124,13 +123,18 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             .unwrap()
     }
 
-    pub fn keccak256(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; STATE_SIZE] {
+    pub fn keccak_f(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; STATE_SIZE] {
         let mut state = inputs;
-        for _ in 0..24 {
-            state = self.keccak256_round(state)
+        for rc in ROUND_CONSTANTS.into_iter().take(24) {
+            state = self.keccak256_round(state);
+            state[0] = state[0].xor_const(rc, self);
         }
 
         state
+    }
+
+    pub fn keccak256(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; STATE_SIZE] {
+        self.keccak_f(inputs)
     }
 }
 
@@ -240,28 +244,54 @@ mod tests {
         );
     }
 
+    fn u8_to_bits(num: u8) -> Vec<bool> {
+        let mut result = Vec::with_capacity(8);
+        let mut n = num;
+        for _ in 0..8 {
+            result.push(n & 1 == 1);
+            n >>= 1;
+        }
+        result
+    }
+
+    fn hex_str_to_bits(input: &str) -> anyhow::Result<Vec<bool>> {
+        let input_u8 = hex::decode(input)?;
+        let input_bits = input_u8
+            .iter()
+            .flat_map(|x| u8_to_bits(*x))
+            .collect::<Vec<_>>();
+        Ok(input_bits)
+    }
+
     #[test]
     fn test_keccak_circuit_builder() {
+        let input = "bb45f489bea73ef400b0ef4cd65dcec3565b0fd75c6eb248f1fefc84dd216650327e5a5c9b02ed7ce898f8ecb2e045cded87742a7723e7fddd9ac96c8aa70f4601000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+        let expected_output = "61060054a4f8cd82609992a7604a95c9165bc95ae016a5299dd7d400dddbea9a3069922d826066fae8aad9aac3d937d6b6db11d4e3ce7663ef4236ca2f1a97a3de6259030506c8f50dcec6588ba1e7598a5f39e74f8f858f3fc04a371d52d761cb369205487758026a035dc5edd42a6bb4f1cc84c2f5a4f7915993a7b209935c40a06104fc2d4d3e337a79a6671f69fb0b3a14ccdf72f66f59828ab0f43bedab3622aa17746d3e536b9bd39974f215916563a5ed55d944d6137ce8cf03677e57bc75e502054f51b0";
+
         let config = CircuitConfig::standard_keccak_config();
         // let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
 
-        let targets = (0..1)
+        let targets = (0..10)
             .map(|_| {
-                let inputs = [(); STATE_SIZE].map(|_| U64Target::new(&mut builder));
-                let outputs = builder.keccak256(inputs.clone());
+                let inputs_t = [(); STATE_SIZE].map(|_| U64Target::new(&mut builder));
+                let outputs_t = builder.keccak256(inputs_t.clone());
 
-                (inputs, outputs)
+                (inputs_t, outputs_t)
             })
             .collect::<Vec<_>>();
         dbg!(builder.num_gates());
         let keccak_circuit_data = builder.build::<C>();
 
         let mut pw = PartialWitness::new();
-        for (inputs, _outputs) in targets {
-            for i in 0..STATE_SIZE {
-                let bits: [bool; 64] = [(); 64].map(|_| rand::random());
-                inputs[i].set_witness(bits.to_vec(), &mut pw);
+        for (inputs_t, outputs_t) in targets {
+            let input_bits = hex_str_to_bits(input).unwrap();
+            let output_bits = hex_str_to_bits(expected_output).unwrap();
+            for ((input_t, output_t), (i, o)) in inputs_t.iter().zip(outputs_t.iter()).zip(input_bits.chunks(64).zip(output_bits.chunks(64))) {
+                // let bits: [bool; 64] = [(); 64].map(|_| rand::random());
+                // inputs[i].set_witness(bits.to_vec(), &mut pw);
+                input_t.set_witness(i.to_vec(), &mut pw);
+                output_t.set_witness(o.to_vec(), &mut pw);
             }
         }
 
