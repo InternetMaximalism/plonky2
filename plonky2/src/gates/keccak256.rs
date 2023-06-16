@@ -493,24 +493,27 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
                     .zip(tmps2[(x + 1) % 5 + y * 5].into_iter())
                     .zip(outputs[x + y * 5].into_iter())
                 {
-                    let gate_type = XorAndNotGate::<F, D>::new();
-                    let gate = builder.add_gate(gate_type, vec![]);
+                    // let out_wire = {
+                    //     let gate_type = XorAndNotGate::<F, D>::new();
+                    //     let gate = builder.add_gate(gate_type, vec![]);
 
-                    // Route input wires.
-                    let a_wire =
-                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_a());
-                    builder.connect_extension(a_wire, a);
-                    let b_wire =
-                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_b());
-                    builder.connect_extension(b_wire, b);
-                    let c_wire =
-                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_c());
-                    builder.connect_extension(c_wire, c);
+                    //     // Route input wires.
+                    //     let a_wire =
+                    //         ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_a());
+                    //     builder.connect_extension(a_wire, a);
+                    //     let b_wire =
+                    //         ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_b());
+                    //     builder.connect_extension(b_wire, b);
+                    //     let c_wire =
+                    //         ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_c());
+                    //     builder.connect_extension(c_wire, c);
 
-                    // Collect output wires.
-                    let out_wire =
-                        ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_output());
-                    // builder.connect_extension(out_wire, o);
+                    //     // Collect output wires.
+                    //     ExtensionTarget::from_range(gate, XorAndNotGate::<F, D>::wires_output())
+                    // };
+
+                    let out_wire = builder.xor_and_not_extension(a, b, c);
+
                     constraints.push(builder.sub_extension(out_wire, o));
                 }
             }
