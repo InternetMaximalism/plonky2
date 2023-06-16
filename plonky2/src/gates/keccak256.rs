@@ -410,31 +410,33 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for Keccak256Round
                 .zip(inputs[x + 3 * 5].into_iter())
                 .zip(inputs[x + 4 * 5].into_iter())
             {
-                // let xor01 = builder.xor_extension(i0, i1);
-                // let xor012 = builder.xor_extension(xor01, i2);
+                // let out_wire = {
+                //     let gate_type = Xor5Gate::<F, D>::new();
+                //     let gate = builder.add_gate(gate_type, vec![]);
 
-                // let xor34 = builder.xor_extension(i3, i4);
-                // let xor345 = builder.xor_extension(xor34, o);
+                //     // Route input wires.
+                //     let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(0));
+                //     builder.connect_extension(in_wire, i0);
+                //     let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(1));
+                //     builder.connect_extension(in_wire, i1);
+                //     let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(2));
+                //     builder.connect_extension(in_wire, i2);
+                //     let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(3));
+                //     builder.connect_extension(in_wire, i3);
+                //     let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(4));
+                //     builder.connect_extension(in_wire, i4);
 
-                // constraints.push(builder.sub_extension(xor012, xor345));
+                //     // Collect output wires.
+                //     ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_output())
+                // };
 
-                let gate_type = Xor5Gate::<F, D>::new();
-                let gate = builder.add_gate(gate_type, vec![]);
-
-                // Route input wires.
-                let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(0));
-                builder.connect_extension(in_wire, i0);
-                let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(1));
-                builder.connect_extension(in_wire, i1);
-                let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(2));
-                builder.connect_extension(in_wire, i2);
-                let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(3));
-                builder.connect_extension(in_wire, i3);
-                let in_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_input(4));
-                builder.connect_extension(in_wire, i4);
-
-                // Collect output wires.
-                let out_wire = ExtensionTarget::from_range(gate, Xor5Gate::<F, D>::wires_output());
+                let out_wire = {
+                    let xor01 = builder.xor_extension(i0, i1);
+                    let xor012 = builder.xor_extension(xor01, i2);
+                    let xor0123 = builder.xor_extension(xor012, i3);
+                    
+                    builder.xor_extension(xor0123, i4)
+                };
 
                 c.push(out_wire);
             }

@@ -87,7 +87,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         output
     }
 
-    pub fn keccak256(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; WIDTH] {
+    pub fn keccak256_round(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; STATE_SIZE] {
         let gate_type = Keccak256RoundGate::<F, D>::new();
         let gate = self.add_gate(gate_type, vec![]);
 
@@ -108,7 +108,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         }
 
         // Collect output wires.
-        (0..5)
+        (0..STATE_SIZE)
             .map(|i| U64Target {
                 bits: Keccak256RoundGate::<F, D>::wires_output(i)
                     .map(|v| {
@@ -122,6 +122,15 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             .collect::<Vec<_>>()
             .try_into()
             .unwrap()
+    }
+
+    pub fn keccak256(&mut self, inputs: [U64Target; STATE_SIZE]) -> [U64Target; STATE_SIZE] {
+        let mut state = inputs;
+        for _ in 0..24 {
+            state = self.keccak256_round(state)
+        }
+
+        state
     }
 }
 
