@@ -23,16 +23,17 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     pub fn conditionally_verify_proof<C: GenericConfig<D, F = F>>(
         &mut self,
         condition: BoolTarget,
-        proof_with_pis0: &ProofWithPublicInputsTarget<D>,
+        proof_with_pis: &ProofWithPublicInputsTarget<D>,
         inner_verifier_data0: &VerifierCircuitTarget,
-        proof_with_pis1: &ProofWithPublicInputsTarget<D>,
         inner_verifier_data1: &VerifierCircuitTarget,
         inner_common_data: &CommonCircuitData<F, D>,
     ) where
         C::Hasher: AlgebraicHasher<F>,
     {
-        let selected_proof =
-            self.select_proof_with_pis(condition, proof_with_pis0, proof_with_pis1);
+        assert_eq!(
+            inner_verifier_data0.constants_sigmas_cap.0.len(),
+            inner_verifier_data1.constants_sigmas_cap.0.len()
+        );
         let selected_verifier_data = VerifierCircuitTarget {
             constants_sigmas_cap: self.select_cap(
                 condition,
@@ -45,8 +46,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 inner_verifier_data1.circuit_digest,
             ),
         };
-
-        self.verify_proof::<C>(&selected_proof, &selected_verifier_data, inner_common_data);
+    
+        self.verify_proof::<C>(proof_with_pis, &selected_verifier_data, inner_common_data);
     }
 
     /// Conditionally verify a proof with a new generated dummy proof.
@@ -60,13 +61,12 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     where
         C::Hasher: AlgebraicHasher<F>,
     {
-        let (dummy_proof_with_pis_target, dummy_verifier_data_target) =
-            self.dummy_proof_and_vk::<C>(inner_common_data)?;
+        let dummy_verifier_data_target =
+            self.dummy_vk::<C>(inner_common_data);
         self.conditionally_verify_proof::<C>(
             condition,
             proof_with_pis,
             inner_verifier_data,
-            &dummy_proof_with_pis_target,
             &dummy_verifier_data_target,
             inner_common_data,
         );
@@ -74,7 +74,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 
     /// Computes `if b { proof_with_pis0 } else { proof_with_pis1 }`.
-    fn select_proof_with_pis(
+    pub fn select_proof_with_pis(
         &mut self,
         b: BoolTarget,
         proof_with_pis0: &ProofWithPublicInputsTarget<D>,
@@ -129,7 +129,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 
     /// Computes `if b { v0 } else { v1 }`.
-    fn select_vec(&mut self, b: BoolTarget, v0: &[Target], v1: &[Target]) -> Vec<Target> {
+    pub fn select_vec(&mut self, b: BoolTarget, v0: &[Target], v1: &[Target]) -> Vec<Target> {
         v0.iter()
             .zip_eq(v1)
             .map(|(t0, t1)| self.select(b, *t0, *t1))
@@ -137,7 +137,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 
     /// Computes `if b { h0 } else { h1 }`.
-    pub(crate) fn select_hash(
+    pub fn select_hash(
         &mut self,
         b: BoolTarget,
         h0: HashOutTarget,
@@ -149,7 +149,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 
     /// Computes `if b { cap0 } else { cap1 }`.
-    fn select_cap(
+    pub fn select_cap(
         &mut self,
         b: BoolTarget,
         cap0: &MerkleCapTarget,
@@ -166,7 +166,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 
     /// Computes `if b { v0 } else { v1 }`.
-    fn select_vec_cap(
+    pub fn select_vec_cap(
         &mut self,
         b: BoolTarget,
         v0: &[MerkleCapTarget],
@@ -197,7 +197,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 
     /// Computes `if b { v0 } else { v1 }`.
-    fn select_vec_ext(
+    pub fn select_vec_ext(
         &mut self,
         b: BoolTarget,
         v0: &[ExtensionTarget<D>],
@@ -289,7 +289,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 
     /// Computes `if b { proof0 } else { proof1 }`.
-    fn select_merkle_proof(
+    pub fn select_merkle_proof(
         &mut self,
         b: BoolTarget,
         proof0: &MerkleProofTarget,
@@ -368,28 +368,33 @@ mod tests {
         data.verify(proof.clone())?;
 
         // Generate dummy proof with the same `CommonCircuitData`.
-        let dummy_data = dummy_circuit(&data.common);
+        let dummy_data = dummy_circuit::<F, C, D>(&data.common);
         let dummy_proof = dummy_proof(&dummy_data, HashMap::new())?;
 
         // Conditionally verify the two proofs.
         let mut builder = CircuitBuilder::<F, D>::new(config);
         let mut pw = PartialWitness::new();
         let pt = builder.add_virtual_proof_with_pis(&data.common);
-        pw.set_proof_with_pis_target(&pt, &proof);
-        let dummy_pt = builder.add_virtual_proof_with_pis(&data.common);
-        pw.set_proof_with_pis_target::<C, D>(&dummy_pt, &dummy_proof);
+        let condition = F::rand().0 % 2 == 0; 
+        let b = builder.constant_bool(condition);
+        if condition {
+            pw.set_proof_with_pis_target(&pt, &proof);
+        } else {
+            pw.set_proof_with_pis_target(&pt, &dummy_proof);
+        }
+        // let dummy_pt = builder.add_virtual_proof_with_pis(&data.common);
+        // pw.set_proof_with_pis_target::<C, D>(&dummy_pt, &dummy_proof);
         let inner_data =
             builder.add_virtual_verifier_data(data.common.config.fri_config.cap_height);
         pw.set_verifier_data_target(&inner_data, &data.verifier_only);
         let dummy_inner_data =
             builder.add_virtual_verifier_data(data.common.config.fri_config.cap_height);
         pw.set_verifier_data_target(&dummy_inner_data, &dummy_data.verifier_only);
-        let b = builder.constant_bool(F::rand().0 % 2 == 0);
+
         builder.conditionally_verify_proof::<C>(
             b,
             &pt,
             &inner_data,
-            &dummy_pt,
             &dummy_inner_data,
             &data.common,
         );

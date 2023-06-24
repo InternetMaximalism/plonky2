@@ -101,7 +101,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         &mut self,
         condition: BoolTarget,
         cyclic_proof_with_pis: &ProofWithPublicInputsTarget<D>,
-        other_proof_with_pis: &ProofWithPublicInputsTarget<D>,
         other_verifier_data: &VerifierCircuitTarget,
         common_data: &CommonCircuitData<F, D>,
     ) -> Result<()>
@@ -138,7 +137,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             condition,
             cyclic_proof_with_pis,
             &verifier_data,
-            other_proof_with_pis,
             other_verifier_data,
             common_data,
         );
@@ -160,12 +158,11 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     where
         C::Hasher: AlgebraicHasher<F>,
     {
-        let (dummy_proof_with_pis_target, dummy_verifier_data_target) =
-            self.dummy_proof_and_vk::<C>(common_data)?;
+        let dummy_verifier_data_target =
+            self.dummy_vk::<C>(common_data);
         self.conditionally_verify_cyclic_proof::<C>(
             condition,
             cyclic_proof_with_pis,
-            &dummy_proof_with_pis_target,
             &dummy_verifier_data_target,
             common_data,
         )?;
