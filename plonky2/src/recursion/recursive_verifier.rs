@@ -27,7 +27,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             inner_common_data.num_public_inputs
         );
         let public_inputs_hash =
-            self.public_inputs_hash::<C::InnerHasher>(proof_with_pis.public_inputs.clone());
+            self.hash_n_to_hash_no_pad::<C::InnerHasher>(proof_with_pis.public_inputs.clone());
         let challenges = proof_with_pis.get_challenges::<F, C>(
             self,
             public_inputs_hash,

@@ -47,6 +47,7 @@ const SIMPLE_OPCODES: OpsColumnsView<Option<u32>> = OpsColumnsView {
     jumpi: G_HIGH,
     pc: G_BASE,
     jumpdest: G_JUMPDEST,
+    push0: G_BASE,
     push: G_VERYLOW,
     dup: G_VERYLOW,
     swap: G_VERYLOW,
@@ -56,6 +57,7 @@ const SIMPLE_OPCODES: OpsColumnsView<Option<u32>> = OpsColumnsView {
     mload_general: KERNEL_ONLY_INSTR,
     mstore_general: KERNEL_ONLY_INSTR,
     syscall: None,
+    exception: None,
 };
 
 fn eval_packed_accumulate<P: PackedField>(

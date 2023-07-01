@@ -89,7 +89,7 @@ global sys_selfdestruct:
     // stack: account_ptr, 0, balance, address, recipient, kexit_info
     %add_const(1)
     // stack: balance_ptr, 0, balance, address, recipient, kexit_info
-    %mstore_trie_data // TODO: This should be a copy-on-write operation.
+    %mstore_trie_data
 
     %stack (balance, address, recipient, kexit_info) ->
         (address, recipient, balance, address, recipient, recipient, balance, kexit_info)
@@ -120,9 +120,10 @@ global sys_revert:
     // stack: kexit_info, offset, size
     %stack (kexit_info, offset, size) -> (offset, size, kexit_info, offset, size)
     %add_or_fault
-    DUP1 %ensure_reasonable_offset
     // stack: offset+size, kexit_info, offset, size
     DUP4 ISZERO %jumpi(revert_zero_size)
+    // stack: offset+size, kexit_info, offset, size
+    DUP1 %ensure_reasonable_offset
     %update_mem_bytes
     %jump(revert_after_gas)
 revert_zero_size:
@@ -199,6 +200,7 @@ global terminate_common:
     // Go back to the parent context.
     %mload_context_metadata(@CTX_METADATA_PARENT_CONTEXT)
     SET_CONTEXT
+    %decrement_call_depth
     // stack: (empty)
 
     // Load the fields that we stored in SEGMENT_KERNEL_GENERAL.

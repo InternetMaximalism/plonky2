@@ -186,25 +186,25 @@ where
 pub struct AggregationChildTarget<const D: usize> {
     is_agg: BoolTarget,
     agg_proof: ProofWithPublicInputsTarget<D>,
-    evm_proof: ProofWithPublicInputsTarget<D>,
+    // evm_proof: ProofWithPublicInputsTarget<D>,
 }
 
 impl<const D: usize> AggregationChildTarget<D> {
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) -> IoResult<()> {
         buffer.write_target_bool(self.is_agg)?;
         buffer.write_target_proof_with_public_inputs(&self.agg_proof)?;
-        buffer.write_target_proof_with_public_inputs(&self.evm_proof)?;
+        // buffer.write_target_proof_with_public_inputs(&self.evm_proof)?;
         Ok(())
     }
 
     pub fn from_buffer(buffer: &mut Buffer) -> IoResult<Self> {
         let is_agg = buffer.read_target_bool()?;
         let agg_proof = buffer.read_target_proof_with_public_inputs()?;
-        let evm_proof = buffer.read_target_proof_with_public_inputs()?;
+        // let evm_proof = buffer.read_target_proof_with_public_inputs()?;
         Ok(Self {
             is_agg,
             agg_proof,
-            evm_proof,
+            // evm_proof,
         })
     }
 }
@@ -529,16 +529,16 @@ where
         let root_vk = builder.constant_verifier_data(&root.circuit.verifier_only);
         let is_agg = builder.add_virtual_bool_target_safe();
         let agg_proof = builder.add_virtual_proof_with_pis(common);
-        let evm_proof = builder.add_virtual_proof_with_pis(common);
+        // let evm_proof = builder.add_virtual_proof_with_pis(common);
         builder
             .conditionally_verify_cyclic_proof::<C>(
-                is_agg, &agg_proof, &evm_proof, &root_vk, common,
+                is_agg, &agg_proof, /* &evm_proof, */ &root_vk, common,
             )
             .expect("Failed to build cyclic recursion circuit");
         AggregationChildTarget {
             is_agg,
             agg_proof,
-            evm_proof,
+            // evm_proof,
         }
     }
 
@@ -632,11 +632,11 @@ where
 
         agg_inputs.set_bool_target(self.aggregation.lhs.is_agg, lhs_is_agg);
         agg_inputs.set_proof_with_pis_target(&self.aggregation.lhs.agg_proof, lhs_proof);
-        agg_inputs.set_proof_with_pis_target(&self.aggregation.lhs.evm_proof, lhs_proof);
+        // agg_inputs.set_proof_with_pis_target(&self.aggregation.lhs.evm_proof, lhs_proof);
 
         agg_inputs.set_bool_target(self.aggregation.rhs.is_agg, rhs_is_agg);
         agg_inputs.set_proof_with_pis_target(&self.aggregation.rhs.agg_proof, rhs_proof);
-        agg_inputs.set_proof_with_pis_target(&self.aggregation.rhs.evm_proof, rhs_proof);
+        // agg_inputs.set_proof_with_pis_target(&self.aggregation.rhs.evm_proof, rhs_proof);
 
         agg_inputs.set_verifier_data_target(
             &self.aggregation.cyclic_vk,

@@ -13,8 +13,8 @@ use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer
 use crate::cpu::columns::{CpuColumnsView, COL_MAP, NUM_CPU_COLUMNS};
 use crate::cpu::membus::NUM_GP_CHANNELS;
 use crate::cpu::{
-    bootstrap_kernel, contextops, control_flow, decode, dup_swap, gas, jumps, membus, memio,
-    modfp254, pc, shift, simple_logic, stack, stack_bounds, syscalls,
+    bootstrap_kernel, contextops, control_flow, decode, dup_swap, exceptions, gas, jumps, membus,
+    memio, modfp254, pc, push0, shift, simple_logic, stack, stack_bounds, syscalls,
 };
 use crate::cross_table_lookup::{Column, TableWithColumns};
 use crate::memory::segments::Segment;
@@ -169,7 +169,6 @@ impl<F: RichField, const D: usize> CpuStark<F, D> {
         let local_values: &mut CpuColumnsView<_> = local_values.borrow_mut();
         decode::generate(local_values);
         membus::generate(local_values);
-        stack_bounds::generate(local_values); // Must come after `decode`.
     }
 }
 
@@ -191,12 +190,14 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for CpuStark<F, D
         control_flow::eval_packed_generic(local_values, next_values, yield_constr);
         decode::eval_packed_generic(local_values, yield_constr);
         dup_swap::eval_packed(local_values, yield_constr);
+        exceptions::eval_packed(local_values, next_values, yield_constr);
         gas::eval_packed(local_values, next_values, yield_constr);
         jumps::eval_packed(local_values, next_values, yield_constr);
         membus::eval_packed(local_values, yield_constr);
         memio::eval_packed(local_values, yield_constr);
         modfp254::eval_packed(local_values, yield_constr);
         pc::eval_packed(local_values, yield_constr);
+        push0::eval_packed(local_values, yield_constr);
         shift::eval_packed(local_values, yield_constr);
         simple_logic::eval_packed(local_values, yield_constr);
         stack::eval_packed(local_values, yield_constr);
@@ -217,12 +218,14 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for CpuStark<F, D
         control_flow::eval_ext_circuit(builder, local_values, next_values, yield_constr);
         decode::eval_ext_circuit(builder, local_values, yield_constr);
         dup_swap::eval_ext_circuit(builder, local_values, yield_constr);
+        exceptions::eval_ext_circuit(builder, local_values, next_values, yield_constr);
         gas::eval_ext_circuit(builder, local_values, next_values, yield_constr);
         jumps::eval_ext_circuit(builder, local_values, next_values, yield_constr);
         membus::eval_ext_circuit(builder, local_values, yield_constr);
         memio::eval_ext_circuit(builder, local_values, yield_constr);
         modfp254::eval_ext_circuit(builder, local_values, yield_constr);
         pc::eval_ext_circuit(builder, local_values, yield_constr);
+        push0::eval_ext_circuit(builder, local_values, yield_constr);
         shift::eval_ext_circuit(builder, local_values, yield_constr);
         simple_logic::eval_ext_circuit(builder, local_values, yield_constr);
         stack::eval_ext_circuit(builder, local_values, yield_constr);

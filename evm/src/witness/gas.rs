@@ -14,7 +14,7 @@ pub(crate) fn gas_to_charge(op: Operation) -> u64 {
     match op {
         Iszero => G_VERYLOW,
         Not => G_VERYLOW,
-        Syscall(_) => KERNEL_ONLY_INSTR,
+        Syscall(_, _, _) => KERNEL_ONLY_INSTR,
         Eq => G_VERYLOW,
         BinaryLogic(_) => G_VERYLOW,
         BinaryArithmetic(Add) => G_VERYLOW,
@@ -38,7 +38,8 @@ pub(crate) fn gas_to_charge(op: Operation) -> u64 {
         Jumpi => G_HIGH,
         Pc => G_BASE,
         Jumpdest => G_JUMPDEST,
-        Push(_) => G_VERYLOW,
+        Push(0) => G_BASE,
+        Push(1..) => G_VERYLOW,
         Dup(_) => G_VERYLOW,
         Swap(_) => G_VERYLOW,
         GetContext => KERNEL_ONLY_INSTR,

@@ -4,7 +4,7 @@ use crate::field::extension::Extendable;
 use crate::gates::keccak256::{Keccak256RoundGate, ROUND_CONSTANTS, STATE_SIZE, WIDTH};
 use crate::gates::keccak_chi::XorAndNotGate;
 use crate::gates::keccak_theta::Xor5Gate;
-use crate::hash::hash_types::{HashOutTarget, RichField};
+use crate::hash::hash_types::RichField;
 use crate::hash::u64_target::{xor_circuit, U64Target};
 use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::target::{BoolTarget, Target};
@@ -29,13 +29,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         swap: BoolTarget,
     ) -> H::AlgebraicPermutation {
         H::permute_swapped(inputs, swap, self)
-    }
-
-    pub fn public_inputs_hash<H: AlgebraicHasher<F>>(
-        &mut self,
-        inputs: Vec<Target>,
-    ) -> HashOutTarget {
-        H::public_inputs_hash(inputs, self)
     }
 }
 

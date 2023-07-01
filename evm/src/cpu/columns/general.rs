@@ -7,6 +7,7 @@ use std::mem::{size_of, transmute};
 #[derive(Clone, Copy)]
 pub(crate) union CpuGeneralColumnsView<T: Copy> {
     arithmetic: CpuArithmeticView<T>,
+    exception: CpuExceptionView<T>,
     logic: CpuLogicView<T>,
     jumps: CpuJumpsView<T>,
     shift: CpuShiftView<T>,
@@ -21,6 +22,16 @@ impl<T: Copy> CpuGeneralColumnsView<T> {
     // SAFETY: Each view is a valid interpretation of the underlying array.
     pub(crate) fn arithmetic_mut(&mut self) -> &mut CpuArithmeticView<T> {
         unsafe { &mut self.arithmetic }
+    }
+
+    // SAFETY: Each view is a valid interpretation of the underlying array.
+    pub(crate) fn exception(&self) -> &CpuExceptionView<T> {
+        unsafe { &self.exception }
+    }
+
+    // SAFETY: Each view is a valid interpretation of the underlying array.
+    pub(crate) fn exception_mut(&mut self) -> &mut CpuExceptionView<T> {
+        unsafe { &mut self.exception }
     }
 
     // SAFETY: Each view is a valid interpretation of the underlying array.
@@ -87,6 +98,12 @@ impl<T: Copy> BorrowMut<[T; NUM_SHARED_COLUMNS]> for CpuGeneralColumnsView<T> {
 pub(crate) struct CpuArithmeticView<T: Copy> {
     // TODO: Add "looking" columns for the arithmetic CTL.
     tmp: T, // temporary, to suppress errors
+}
+
+#[derive(Copy, Clone)]
+pub(crate) struct CpuExceptionView<T: Copy> {
+    // Exception code as little-endian bits.
+    pub(crate) exc_code_bits: [T; 3],
 }
 
 #[derive(Copy, Clone)]

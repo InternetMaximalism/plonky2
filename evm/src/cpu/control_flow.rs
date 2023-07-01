@@ -8,7 +8,7 @@ use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer
 use crate::cpu::columns::{CpuColumnsView, COL_MAP};
 use crate::cpu::kernel::aggregator::KERNEL;
 
-const NATIVE_INSTRUCTIONS: [usize; 31] = [
+const NATIVE_INSTRUCTIONS: [usize; 32] = [
     COL_MAP.op.add,
     COL_MAP.op.mul,
     COL_MAP.op.sub,
@@ -36,6 +36,7 @@ const NATIVE_INSTRUCTIONS: [usize; 31] = [
     // not JUMPI (possible need to jump)
     COL_MAP.op.pc,
     COL_MAP.op.jumpdest,
+    COL_MAP.op.push0,
     // not PUSH (need to increment by more than 1)
     COL_MAP.op.dup,
     COL_MAP.op.swap,
@@ -45,6 +46,7 @@ const NATIVE_INSTRUCTIONS: [usize; 31] = [
     COL_MAP.op.mload_general,
     COL_MAP.op.mstore_general,
     // not SYSCALL (performs a jump)
+    // not exceptions (also jump)
 ];
 
 pub(crate) fn get_halt_pcs<F: Field>() -> (F, F) {

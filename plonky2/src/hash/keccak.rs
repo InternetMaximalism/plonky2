@@ -116,10 +116,6 @@ impl<F: RichField, const N: usize> Hasher<F> for KeccakHash<N> {
         BytesHash(arr)
     }
 
-    fn hash_public_inputs(input: &[F]) -> Self::Hash {
-        KeccakHash::hash_no_pad(input)
-    }
-
     fn two_to_one(left: Self::Hash, right: Self::Hash) -> Self::Hash {
         let mut v = vec![0; N * 2];
         v[0..N].copy_from_slice(&left.0);

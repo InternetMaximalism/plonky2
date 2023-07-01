@@ -234,7 +234,7 @@ mod tests {
         let verifier_data =
             builder.add_virtual_verifier_data(data.common.config.fri_config.cap_height);
         builder.verify_proof::<C>(&proof, &verifier_data, &data.common);
-        while builder.num_gates() < 1 << 12 {
+        while builder.num_gates() < 1 << 11 {
             builder.add_gate(NoopGate, vec![]);
         }
         builder.build::<C>().common

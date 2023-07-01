@@ -457,8 +457,8 @@ mod tests {
         let node_data = TreeRecursionNodeData {
             proof0: &leaf_proof0,
             proof1: &leaf_proof1,
-            verifier_data0: &leaf_vd0,
-            verifier_data1: &leaf_vd1,
+            verifier_data0: leaf_vd0,
+            verifier_data1: leaf_vd1,
             verifier_data: node_vd,
         };
         set_tree_recursion_node_data_target(&mut pw, &node_targets, &node_data)?;
@@ -467,7 +467,7 @@ mod tests {
             .expect("Node public inputs do not match its verifier data");
 
         // build root node
-        let mut builder = CircuitBuilder::<F, D>::new(config.clone());
+        let mut builder = CircuitBuilder::<F, D>::new(config);
         let root_targets = builder.tree_recursion_node::<C>(&mut common_data)?;
         let data = builder.build::<C>();
         let root_vd = &data.verifier_only;

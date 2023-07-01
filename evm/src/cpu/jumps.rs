@@ -15,7 +15,7 @@ pub fn eval_packed_exit_kernel<P: PackedField>(
     yield_constr: &mut ConstraintConsumer<P>,
 ) {
     let input = lv.mem_channels[0].value;
-    let filter = lv.is_cpu_cycle * lv.op.exit_kernel;
+    let filter = lv.op.exit_kernel;
 
     // If we are executing `EXIT_KERNEL` then we simply restore the program counter, kernel mode
     // flag, and gas counter. The middle 4 (32-bit) limbs are ignored (this is not part of the spec,
@@ -34,7 +34,7 @@ pub fn eval_ext_circuit_exit_kernel<F: RichField + Extendable<D>, const D: usize
     yield_constr: &mut RecursiveConstraintConsumer<F, D>,
 ) {
     let input = lv.mem_channels[0].value;
-    let filter = builder.mul_extension(lv.is_cpu_cycle, lv.op.exit_kernel);
+    let filter = lv.op.exit_kernel;
 
     // If we are executing `EXIT_KERNEL` then we simply restore the program counter and kernel mode
     // flag. The top 6 (32-bit) limbs are ignored (this is not part of the spec, but we trust the

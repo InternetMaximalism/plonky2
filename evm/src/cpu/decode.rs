@@ -22,7 +22,7 @@ use crate::cpu::columns::{CpuColumnsView, COL_MAP};
 /// behavior.
 /// Note: invalid opcodes are not represented here. _Any_ opcode is permitted to decode to
 /// `is_invalid`. The kernel then verifies that the opcode was _actually_ invalid.
-const OPCODES: [(u8, usize, bool, usize); 36] = [
+const OPCODES: [(u8, usize, bool, usize); 37] = [
     // (start index of block, number of top bits to check (log2), kernel-only, flag column)
     (0x01, 0, false, COL_MAP.op.add),
     (0x02, 0, false, COL_MAP.op.mul),
@@ -52,6 +52,7 @@ const OPCODES: [(u8, usize, bool, usize); 36] = [
     (0x57, 0, false, COL_MAP.op.jumpi),
     (0x58, 0, false, COL_MAP.op.pc),
     (0x5b, 0, false, COL_MAP.op.jumpdest),
+    (0x5f, 0, false, COL_MAP.op.push0),
     (0x60, 5, false, COL_MAP.op.push), // 0x60-0x7f
     (0x80, 4, false, COL_MAP.op.dup),  // 0x80-0x8f
     (0x90, 4, false, COL_MAP.op.swap), // 0x90-0x9f
@@ -61,33 +62,6 @@ const OPCODES: [(u8, usize, bool, usize); 36] = [
     (0xfb, 0, true, COL_MAP.op.mload_general),
     (0xfc, 0, true, COL_MAP.op.mstore_general),
 ];
-
-/// Bitfield of invalid opcodes, in little-endian order.
-pub(crate) const fn invalid_opcodes_user() -> [u8; 32] {
-    let mut res = [u8::MAX; 32]; // Start with all opcodes marked invalid.
-
-    let mut i = 0;
-    while i < OPCODES.len() {
-        let (block_start, lb_block_len, kernel_only, _) = OPCODES[i];
-        i += 1;
-
-        if kernel_only {
-            continue;
-        }
-
-        let block_len = 1 << lb_block_len;
-        let block_start = block_start as usize;
-        let block_end = block_start + block_len;
-        let mut j = block_start;
-        while j < block_end {
-            let byte = j / u8::BITS as usize;
-            let bit = j % u8::BITS as usize;
-            res[byte] &= !(1 << bit); // Mark opcode as invalid by zeroing the bit.
-            j += 1;
-        }
-    }
-    res
-}
 
 pub fn generate<F: RichField>(lv: &mut CpuColumnsView<F>) {
     let cycle_filter = lv.is_cpu_cycle;
