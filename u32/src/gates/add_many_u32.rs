@@ -11,7 +11,7 @@ use plonky2::gates::gate::Gate;
 use plonky2::gates::util::StridedConstraintConsumer;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
-use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator, WitnessGeneratorRef};
+use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGeneratorRef};
 use plonky2::iop::target::Target;
 use plonky2::iop::wire::Wire;
 use plonky2::iop::witness::{PartitionWitness, Witness, WitnessWrite};
@@ -19,6 +19,7 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::CircuitConfig;
 use plonky2::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
 use plonky2::util::ceil_div_usize;
+use plonky2::util::serialization::{IoResult, Buffer};
 
 const LOG2_MAX_NUM_ADDENDS: usize = 4;
 const MAX_NUM_ADDENDS: usize = 16;
@@ -269,11 +270,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32AddManyGate
         self.num_ops * (3 + Self::num_limbs())
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
     where
         Self: Sized {
         todo!()
@@ -355,11 +356,11 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
         format!("{self:?}")
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()

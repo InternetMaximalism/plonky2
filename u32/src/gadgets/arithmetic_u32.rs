@@ -8,6 +8,7 @@ use plonky2::iop::generator::{GeneratedValues, SimpleGenerator};
 use plonky2::iop::target::Target;
 use plonky2::iop::witness::{PartitionWitness, Witness};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
+use plonky2::util::serialization::{IoResult, Buffer};
 
 use crate::gates::add_many_u32::U32AddManyGate;
 use crate::gates::arithmetic_u32::U32ArithmeticGate;
@@ -259,11 +260,11 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
         todo!()
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()

@@ -12,6 +12,7 @@ use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::iop::witness::{PartitionWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::util::ceil_div_usize;
+use plonky2::util::serialization::{IoResult, Buffer};
 use plonky2_u32::gadgets::arithmetic_u32::{CircuitBuilderU32, U32Target};
 use plonky2_u32::gadgets::range_check::range_check_u32_circuit;
 use plonky2_u32::witness::GeneratedValuesU32;
@@ -490,11 +491,11 @@ impl<F: RichField + Extendable<D>, const D: usize, FF: PrimeField> SimpleGenerat
         todo!()
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()
@@ -549,11 +550,11 @@ impl<F: RichField + Extendable<D>, const D: usize, FF: PrimeField> SimpleGenerat
         todo!()
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()
@@ -604,11 +605,11 @@ impl<F: RichField + Extendable<D>, const D: usize, FF: PrimeField> SimpleGenerat
         todo!()
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()
@@ -657,11 +658,11 @@ impl<F: RichField + Extendable<D>, const D: usize, FF: PrimeField> SimpleGenerat
         todo!()
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()
@@ -701,11 +702,11 @@ impl<F: RichField + Extendable<D>, const D: usize, FF: PrimeField> SimpleGenerat
         todo!()
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()

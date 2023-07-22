@@ -12,7 +12,7 @@ use plonky2::gates::packed_util::PackedEvaluableBase;
 use plonky2::gates::util::StridedConstraintConsumer;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
-use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator, WitnessGeneratorRef};
+use plonky2::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGeneratorRef};
 use plonky2::iop::target::Target;
 use plonky2::iop::wire::Wire;
 use plonky2::iop::witness::{PartitionWitness, Witness, WitnessWrite};
@@ -23,6 +23,7 @@ use plonky2::plonk::vars::{
     EvaluationVarsBasePacked,
 };
 use plonky2::util::{bits_u64, ceil_div_usize};
+use plonky2::util::serialization::{IoResult, Buffer};
 
 /// A gate for checking that one value is less than or equal to another.
 #[derive(Clone, Debug)]
@@ -321,11 +322,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ComparisonGate
         6 + 5 * self.num_chunks + self.chunk_bits()
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()
@@ -537,11 +538,11 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
         format!("{self:?}")
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()

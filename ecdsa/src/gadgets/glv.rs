@@ -10,6 +10,7 @@ use plonky2::iop::generator::{GeneratedValues, SimpleGenerator};
 use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::iop::witness::{PartitionWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
+use plonky2::util::serialization::{IoResult, Buffer};
 
 use crate::curve::glv::{decompose_secp256k1_scalar, GLV_BETA, GLV_S};
 use crate::curve::secp256k1::Secp256K1;
@@ -133,11 +134,11 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F>
         todo!()
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> plonky2::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut plonky2::util::serialization::Buffer) -> plonky2::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut Buffer) -> IoResult<Self>
     where
         Self: Sized {
         todo!()

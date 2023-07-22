@@ -4,9 +4,6 @@
 //! `poseidon_constants.sage` script in the `mir-protocol/hash-constants`
 //! repository.
 
-use plonky2_field::types::Field;
-use unroll::unroll_for_loops;
-
 use crate::field::goldilocks_field::GoldilocksField;
 use crate::hash::poseidon::{Poseidon, N_PARTIAL_ROUNDS};
 
@@ -216,8 +213,10 @@ impl Poseidon for GoldilocksField {
 
     #[cfg(target_arch="x86_64")]
     #[inline(always)]
-    #[unroll_for_loops]
+    #[unroll::unroll_for_loops]
     fn mds_layer(state: &[Self; 12]) -> [Self; 12] {
+        use plonky2_field::types::Field;
+
         let mut result = [GoldilocksField::ZERO; 12];
 
         // Using the linearity of the operations we can split the state into a low||high decomposition
@@ -308,13 +307,14 @@ impl Poseidon for GoldilocksField {
 // The following code has been adapted from winterfell/crypto/src/hash/mds/mds_f64_12x12.rs
 // located at https://github.com/facebook/winterfell.
 
-const MDS_FREQ_BLOCK_ONE: [i64; 3] = [16, 32, 16];
-const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(2, -1), (-4, 1), (16, 1)];
-const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-1, -8, 2];
-
 /// Split 3 x 4 FFT-based MDS vector-multiplication with the Poseidon circulant MDS matrix.
+#[cfg(target_arch="x86_64")]
 #[inline(always)]
 fn mds_multiply_freq(state: [u64; 12]) -> [u64; 12] {
+    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [16, 32, 16];
+    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(2, -1), (-4, 1), (16, 1)];
+    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-1, -8, 2];
+
     let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = state;
 
     let (u0, u1, u2) = fft4_real([s0, s3, s6, s9]);
@@ -342,6 +342,7 @@ fn mds_multiply_freq(state: [u64; 12]) -> [u64; 12] {
 }
 
 /// Real 2-FFT over u64 integers.
+#[cfg(target_arch="x86_64")]
 #[inline(always)]
 fn fft2_real(x: [u64; 2]) -> [i64; 2] {
     [(x[0] as i64 + x[1] as i64), (x[0] as i64 - x[1] as i64)]
@@ -349,12 +350,14 @@ fn fft2_real(x: [u64; 2]) -> [i64; 2] {
 
 /// Real 2-iFFT over u64 integers.
 /// Division by two to complete the inverse FFT is not performed here.
+#[cfg(target_arch="x86_64")]
 #[inline(always)]
 fn ifft2_real_unreduced(y: [i64; 2]) -> [u64; 2] {
     [(y[0] + y[1]) as u64, (y[0] - y[1]) as u64]
 }
 
 /// Real 4-FFT over u64 integers.
+#[cfg(target_arch="x86_64")]
 #[inline(always)]
 fn fft4_real(x: [u64; 4]) -> (i64, (i64, i64), i64) {
     let [z0, z2] = fft2_real([x[0], x[2]]);
@@ -367,6 +370,7 @@ fn fft4_real(x: [u64; 4]) -> (i64, (i64, i64), i64) {
 
 /// Real 4-iFFT over u64 integers.
 /// Division by four to complete the inverse FFT is not performed here.
+#[cfg(target_arch="x86_64")]
 #[inline(always)]
 fn ifft4_real_unreduced(y: (i64, (i64, i64), i64)) -> [u64; 4] {
     let z0 = y.0 + y.2;
@@ -380,6 +384,7 @@ fn ifft4_real_unreduced(y: (i64, (i64, i64), i64)) -> [u64; 4] {
     [x0, x1, x2, x3]
 }
 
+#[cfg(target_arch="x86_64")]
 #[inline(always)]
 fn block1(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
     let [x0, x1, x2] = x;
@@ -391,6 +396,7 @@ fn block1(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
     [z0, z1, z2]
 }
 
+#[cfg(target_arch="x86_64")]
 #[inline(always)]
 fn block2(x: [(i64, i64); 3], y: [(i64, i64); 3]) -> [(i64, i64); 3] {
     let [(x0r, x0i), (x1r, x1i), (x2r, x2i)] = x;
@@ -429,6 +435,7 @@ fn block2(x: [(i64, i64); 3], y: [(i64, i64); 3]) -> [(i64, i64); 3] {
     [z0, z1, z2]
 }
 
+#[cfg(target_arch="x86_64")]
 #[inline(always)]
 fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
     let [x0, x1, x2] = x;
