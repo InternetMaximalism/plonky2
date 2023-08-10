@@ -58,12 +58,9 @@ impl<F: RichField + Extendable<D>, const D: usize> FibonacciStark<F, D> {
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for FibonacciStark<F, D> {
-    const COLUMNS: usize = 4;
-    const PUBLIC_INPUTS: usize = 3;
-
     fn eval_packed_generic<FE, P, const D2: usize>(
         &self,
-        vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        vars: StarkEvaluationVars<FE, P>,
         yield_constr: &mut ConstraintConsumer<P>,
     ) where
         FE: FieldExtension<D2, BaseField = F>,
@@ -88,7 +85,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for FibonacciStar
     fn eval_ext_circuit(
         &self,
         builder: &mut CircuitBuilder<F, D>,
-        vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        vars: StarkEvaluationTargets<D>,
         yield_constr: &mut RecursiveConstraintConsumer<F, D>,
     ) {
         // Check public inputs.
@@ -156,7 +153,7 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
         type S = FibonacciStark<F, D>;
 
-        let config = StarkConfig::standard_fast_config();
+        let config = StarkConfig::standard_fast_config(4, 3);
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
@@ -165,7 +162,7 @@ mod tests {
             stark,
             &config,
             trace,
-            public_inputs,
+            public_inputs.to_vec(),
             &mut TimingTree::default(),
         )?;
 
@@ -181,7 +178,8 @@ mod tests {
 
         let num_rows = 1 << 5;
         let stark = S::new(num_rows);
-        test_stark_low_degree(stark)
+        let config = StarkConfig::standard_fast_config(4, 3);
+        test_stark_low_degree(&config, stark)
     }
 
     #[test]
@@ -193,7 +191,8 @@ mod tests {
 
         let num_rows = 1 << 5;
         let stark = S::new(num_rows);
-        test_stark_circuit_constraints::<F, C, S, D>(stark)
+        let config = StarkConfig::standard_fast_config(4, 3);
+        test_stark_circuit_constraints::<F, C, S, D>(&config, stark)
     }
 
     #[test]
@@ -204,7 +203,7 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
         type S = FibonacciStark<F, D>;
 
-        let config = StarkConfig::standard_fast_config();
+        let config = StarkConfig::standard_fast_config(4, 3);
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
@@ -213,7 +212,7 @@ mod tests {
             stark,
             &config,
             trace,
-            public_inputs,
+            public_inputs.to_vec(),
             &mut TimingTree::default(),
         )?;
         verify_stark_proof(stark, proof.clone(), &config)?;
@@ -235,8 +234,6 @@ mod tests {
     ) -> Result<()>
     where
         InnerC::Hasher: AlgebraicHasher<F>,
-        [(); S::COLUMNS]:,
-        [(); S::PUBLIC_INPUTS]:,
     {
         let circuit_config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(circuit_config);
@@ -245,7 +242,7 @@ mod tests {
         let pt = add_virtual_stark_proof_with_pis(&mut builder, stark, inner_config, degree_bits);
         set_stark_proof_with_pis_target(&mut pw, &pt, &inner_proof);
 
-        verify_stark_proof_circuit::<F, InnerC, S, D>(&mut builder, stark, pt, inner_config);
+        verify_stark_proof_circuit::<F, InnerC, S, D>(&mut builder, stark, &pt, inner_config);
 
         if print_gate_counts {
             builder.print_gate_counts(0);

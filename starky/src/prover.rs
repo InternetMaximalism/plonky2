@@ -33,16 +33,22 @@ pub fn prove<F, C, S, const D: usize>(
     stark: S,
     config: &StarkConfig,
     trace_poly_values: Vec<PolynomialValues<F>>,
-    public_inputs: [F; S::PUBLIC_INPUTS],
+    public_inputs: Vec<F>,
     timing: &mut TimingTree,
 ) -> Result<StarkProofWithPublicInputs<F, C, D>>
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
 {
+    ensure!(
+        trace_poly_values.len() == config.num_columns,
+        "Invalid column length"
+    );
+    ensure!(
+        public_inputs.len() == config.num_public_inputs,
+        "Invalid public input length"
+    );
     let degree = trace_poly_values[0].len();
     let degree_bits = log2_strict(degree);
     let fri_params = config.fri_params(degree_bits);
@@ -115,7 +121,7 @@ where
         &stark,
         &trace_commitment,
         &permutation_zs_commitment_challenges,
-        public_inputs,
+        public_inputs.clone(),
         alphas,
         degree_bits,
         config,
@@ -202,7 +208,7 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
         PolynomialBatch<F, C, D>,
         Vec<PermutationChallengeSet<F>>,
     )>,
-    public_inputs: [F; S::PUBLIC_INPUTS],
+    public_inputs: Vec<F>,
     alphas: Vec<F>,
     degree_bits: usize,
     config: &StarkConfig,
@@ -212,9 +218,8 @@ where
     P: PackedField<Scalar = F>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
 {
+    assert_eq!(public_inputs.len(), config.num_public_inputs);
     let degree = 1 << degree_bits;
     let rate_bits = config.fri_config.rate_bits;
 
@@ -236,7 +241,7 @@ where
     let z_h_on_coset = ZeroPolyOnCoset::<F>::new(degree_bits, quotient_degree_bits);
 
     // Retrieve the LDE values at index `i`.
-    let get_trace_values_packed = |i_start| -> [P; S::COLUMNS] {
+    let get_trace_values_packed = |i_start| -> Vec<P> {
         trace_commitment
             .get_lde_values_packed(i_start, step)
             .try_into()

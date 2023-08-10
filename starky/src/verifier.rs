@@ -27,12 +27,8 @@ pub fn verify_stark_proof<
     stark: S,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     config: &StarkConfig,
-) -> Result<()>
-where
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
-{
-    ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
+) -> Result<()> {
+    ensure!(proof_with_pis.public_inputs.len() == config.num_public_inputs);
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
     let challenges = proof_with_pis.get_challenges(&stark, config, degree_bits);
     verify_stark_proof_with_challenges(stark, proof_with_pis, challenges, degree_bits, config)
@@ -49,11 +45,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     challenges: StarkProofChallenges<F, D>,
     degree_bits: usize,
     config: &StarkConfig,
-) -> Result<()>
-where
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
-{
+) -> Result<()> {
     validate_proof_shape(&stark, &proof_with_pis, config)?;
     check_permutation_options(&stark, &proof_with_pis, &challenges)?;
     let StarkProofWithPublicInputs {
@@ -68,14 +60,12 @@ where
         quotient_polys,
     } = &proof.openings;
     let vars = StarkEvaluationVars {
-        local_values: &local_values.to_vec().try_into().unwrap(),
-        next_values: &next_values.to_vec().try_into().unwrap(),
+        local_values: &local_values,
+        next_values: &next_values,
         public_inputs: &public_inputs
             .into_iter()
             .map(F::Extension::from_basefield)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap(),
+            .collect_vec(),
     };
 
     let (l_0, l_last) = eval_l_0_and_l_last(degree_bits, challenges.stark_zeta);
@@ -153,7 +143,6 @@ where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
-    [(); S::COLUMNS]:,
 {
     let StarkProofWithPublicInputs {
         proof,
@@ -179,7 +168,7 @@ where
         quotient_polys,
     } = openings;
 
-    ensure!(public_inputs.len() == S::PUBLIC_INPUTS);
+    ensure!(public_inputs.len() == config.num_public_inputs);
 
     let fri_params = config.fri_params(degree_bits);
     let cap_height = fri_params.config.cap_height;
@@ -188,8 +177,8 @@ where
     ensure!(trace_cap.height() == cap_height);
     ensure!(quotient_polys_cap.height() == cap_height);
 
-    ensure!(local_values.len() == S::COLUMNS);
-    ensure!(next_values.len() == S::COLUMNS);
+    ensure!(local_values.len() == config.num_columns);
+    ensure!(next_values.len() == config.num_columns);
     ensure!(quotient_polys.len() == stark.num_quotient_polys(config));
 
     if stark.uses_permutation_args() {
