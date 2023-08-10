@@ -46,6 +46,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> S
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct StarkProofTarget<const D: usize> {
     pub trace_cap: MerkleCapTarget,
     pub permutation_zs_cap: Option<MerkleCapTarget>,
@@ -77,6 +78,7 @@ pub struct StarkProofWithPublicInputs<
     pub public_inputs: Vec<F>,
 }
 
+#[derive(Clone, Debug)]
 pub struct StarkProofWithPublicInputsTarget<const D: usize> {
     pub proof: StarkProofTarget<D>,
     pub public_inputs: Vec<Target>,
@@ -182,6 +184,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct StarkOpeningSetTarget<const D: usize> {
     pub local_values: Vec<ExtensionTarget<D>>,
     pub next_values: Vec<ExtensionTarget<D>>,
