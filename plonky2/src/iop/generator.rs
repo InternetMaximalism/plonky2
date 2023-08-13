@@ -121,6 +121,12 @@ pub trait WitnessGenerator<F: Field>: 'static + Send + Sync + Debug {
 /// and `Eq` based on generator IDs.
 pub struct WitnessGeneratorRef<F: Field>(pub Box<dyn WitnessGenerator<F>>);
 
+impl<F: Field> From<Box<dyn WitnessGenerator<F>>> for WitnessGeneratorRef<F> {
+    fn from(generator: Box<dyn WitnessGenerator<F>>) -> Self {
+        Self(generator)
+    }
+}
+
 impl<F: Field> WitnessGeneratorRef<F> {
     pub fn new<G: WitnessGenerator<F>>(generator: G) -> WitnessGeneratorRef<F> {
         WitnessGeneratorRef(Box::new(generator))

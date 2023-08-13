@@ -18,6 +18,20 @@ use crate::witness::GeneratedValuesU32;
 #[derive(Clone, Copy, Debug)]
 pub struct U32Target(pub Target);
 
+impl core::ops::Deref for U32Target {
+    type Target = Target;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Target> for U32Target {
+    fn from(t: Target) -> Self {
+        Self(t)
+    }
+}
+
 pub trait CircuitBuilderU32<F: RichField + Extendable<D>, const D: usize> {
     fn add_virtual_u32_target(&mut self) -> U32Target;
 

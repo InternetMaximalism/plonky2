@@ -181,6 +181,12 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32RangeCheckG
         Self: Sized {
         todo!()
     }
+
+    #[cfg(feature = "circom_verifier")]
+    fn export_circom_verification_code(&self) -> String { unimplemented!() }
+
+    #[cfg(feature = "solidity_verifier")]
+    fn export_solidity_verification_code(&self) -> String { unimplemented!() }
 }
 
 #[derive(Debug)]

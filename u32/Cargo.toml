@@ -12,3 +12,8 @@ plonky2 = { path = "../plonky2", default-features = false }
 [dev-dependencies]
 plonky2 = { path = "../plonky2", default-features = false, features = ["gate_testing"] }
 rand = { version = "0.8.4", default-features = false, features = ["getrandom"] }
+
+[features]
+default = ["circom_verifier", "solidity_verifier"]
+circom_verifier = ["plonky2/circom_verifier"]
+solidity_verifier = ["plonky2/solidity_verifier"]

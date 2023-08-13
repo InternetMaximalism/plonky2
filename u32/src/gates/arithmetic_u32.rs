@@ -89,56 +89,6 @@ impl<F: RichField + Extendable<D>, const D: usize> U32ArithmeticGate<F, D> {
     }
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> U32ArithmeticGate<F, D> {
-
-    pub fn export_circom_verification_code(&self) -> String {
-        todo!()
-    }
-    
-    pub fn export_solidity_verification_code(&self) -> String {
-        let mut template_str = format!(
-            "library ArithmeticU32$NUM_OPSLib {{
-    using GoldilocksExtLib for uint64[2];
-    function set_filter(GatesUtilsLib.EvaluationVars memory ev) internal pure {{
-        $SET_FILTER;
-    }}
-    function eval(GatesUtilsLib.EvaluationVars memory ev, uint64[2][$NUM_GATE_CONSTRAINTS] memory constraints) internal pure {{
-        uint32 index = 0;
-        for (uint32 i = 0; i < $NUM_OPS; i++) {{
-            GatesUtilsLib.push(constraints, ev.filter, index, ev.wires[6 * i + 5].mul(GatesUtilsLib.field_ext_from(0xFFFFFFFF, 0).sub(ev.wires[6 * i + 4])).sub(GatesUtilsLib.field_ext_from(1, 0)).mul(ev.wires[6 * i + 3]));
-            index++;
-            GatesUtilsLib.push(constraints, ev.filter, index, ev.wires[6 * i + 4].mul(GatesUtilsLib.field_ext_from(0x100000000, 0)).add(ev.wires[6 * i + 3]).sub(ev.wires[6 * i].mul(ev.wires[6 * i + 1]).add(ev.wires[6 * i + 2])));
-            index++;
-            uint64[2] memory combined_low_limbs;
-            uint64[2] memory combined_high_limbs;
-            for (uint32 j = 32; j > 0; j--) {{
-                uint64[2] memory this_limb = ev.wires[6 * $NUM_OPS + 32 * i + j - 1];
-                uint64[2] memory product = this_limb;
-                for (uint32 k = 1; k < 4; k++) {{
-                    product = product.mul(this_limb.sub(GatesUtilsLib.field_ext_from(k, 0)));
-                }}
-                GatesUtilsLib.push(constraints, ev.filter, index, product);
-                index++;
-                if (j - 1 < 16) {{
-                    combined_low_limbs = GatesUtilsLib.field_ext_from(4, 0).mul(combined_low_limbs).add(this_limb);
-                }} else {{
-                    combined_high_limbs = GatesUtilsLib.field_ext_from(4, 0).mul(combined_high_limbs).add(this_limb);
-                }}
-            }}
-            GatesUtilsLib.push(constraints, ev.filter, index, combined_low_limbs.sub(ev.wires[6 * i + 3]));
-            index++;
-            GatesUtilsLib.push(constraints, ev.filter, index, combined_high_limbs.sub(ev.wires[6 * i + 4]));
-            index++;
-        }}
-    }}
-}}"
-        )
-            .to_string();
-        template_str = template_str.replace("$NUM_OPS", &*self.num_ops.to_string());
-        template_str
-    }
-}
-
 impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32ArithmeticGate<F, D> {
     fn id(&self) -> String {
         format!("{self:?}")
@@ -332,6 +282,51 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for U32ArithmeticG
     where
         Self: Sized {
         todo!()
+    }
+
+    #[cfg(feature = "circom_verifier")]
+    fn export_circom_verification_code(&self) -> String { todo!() }
+
+    #[cfg(feature = "solidity_verifier")]
+    fn export_solidity_verification_code(&self) -> String {
+        let mut template_str = "library ArithmeticU32${NUM_OPS}Lib {
+    using GoldilocksExtLib for uint64[2];
+    function set_filter(GatesUtilsLib.EvaluationVars memory ev) internal pure {
+        $SET_FILTER;
+    }
+    function eval(GatesUtilsLib.EvaluationVars memory ev, uint64[2][$NUM_GATE_CONSTRAINTS] memory constraints) internal pure {
+        uint32 index = 0;
+        for (uint32 i = 0; i < ${NUM_OPS}; i++) {
+            GatesUtilsLib.push(constraints, ev.filter, index, ev.wires[6 * i + 5].mul(GatesUtilsLib.field_ext_from(0xFFFFFFFF, 0).sub(ev.wires[6 * i + 4])).sub(GatesUtilsLib.field_ext_from(1, 0)).mul(ev.wires[6 * i + 3]));
+            index++;
+            GatesUtilsLib.push(constraints, ev.filter, index, ev.wires[6 * i + 4].mul(GatesUtilsLib.field_ext_from(0x100000000, 0)).add(ev.wires[6 * i + 3]).sub(ev.wires[6 * i].mul(ev.wires[6 * i + 1]).add(ev.wires[6 * i + 2])));
+            index++;
+            uint64[2] memory combined_low_limbs;
+            uint64[2] memory combined_high_limbs;
+            for (uint32 j = 32; j > 0; j--) {
+                uint64[2] memory this_limb = ev.wires[6 * ${NUM_OPS} + 32 * i + j - 1];
+                uint64[2] memory product = this_limb;
+                for (uint32 k = 1; k < 4; k++) {
+                    product = product.mul(this_limb.sub(GatesUtilsLib.field_ext_from(k, 0)));
+                }
+                GatesUtilsLib.push(constraints, ev.filter, index, product);
+                index++;
+                if (j - 1 < 16) {
+                    combined_low_limbs = GatesUtilsLib.field_ext_from(4, 0).mul(combined_low_limbs).add(this_limb);
+                } else {
+                    combined_high_limbs = GatesUtilsLib.field_ext_from(4, 0).mul(combined_high_limbs).add(this_limb);
+                }
+            }
+            GatesUtilsLib.push(constraints, ev.filter, index, combined_low_limbs.sub(ev.wires[6 * i + 3]));
+            index++;
+            GatesUtilsLib.push(constraints, ev.filter, index, combined_high_limbs.sub(ev.wires[6 * i + 4]));
+            index++;
+        }
+    }
+}".to_string()
+            ;
+        template_str = template_str.replace("${NUM_OPS}", &self.num_ops.to_string());
+        template_str
     }
 }
 

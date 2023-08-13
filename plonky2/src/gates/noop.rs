@@ -26,6 +26,12 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for NoopGate {
         Ok(Self)
     }
 
+    #[cfg(feature = "circom_verifier")]
+    fn export_circom_verification_code(&self) -> String { unimplemented!() }
+
+    #[cfg(feature = "solidity_verifier")]
+    fn export_solidity_verification_code(&self) -> String { unimplemented!() }
+
     fn eval_unfiltered(&self, _vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
         Vec::new()
     }

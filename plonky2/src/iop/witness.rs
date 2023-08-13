@@ -2,7 +2,6 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use hashbrown::HashMap;
-use itertools::{zip_eq, Itertools};
 
 use crate::field::extension::{Extendable, FieldExtension};
 use crate::field::types::Field;
@@ -47,7 +46,8 @@ pub trait WitnessWrite<F: Field> {
     }
 
     fn set_target_arr(&mut self, targets: &[Target], values: &[F]) {
-        zip_eq(targets, values).for_each(|(&target, &value)| self.set_target(target, value));
+        assert_eq!(targets.len(), values.len());
+        targets.iter().zip(values).for_each(|(&target, &value)| self.set_target(target, value));
     }
 
     fn set_extension_targets<const D: usize>(
@@ -87,7 +87,8 @@ pub trait WitnessWrite<F: Field> {
         } = proof_with_pis_target;
 
         // Set public inputs.
-        for (&pi_t, &pi) in pi_targets.iter().zip_eq(public_inputs) {
+        assert_eq!(pi_targets.len(), public_inputs.len());
+        for (&pi_t, &pi) in pi_targets.iter().zip(public_inputs) {
             self.set_target(pi_t, pi);
         }
 
@@ -125,10 +126,12 @@ pub trait WitnessWrite<F: Field> {
     ) where
         F: RichField + Extendable<D>,
     {
+        assert_eq!(fri_openings_target
+            .batches.len(), fri_openings.batches.len());
         for (batch_target, batch) in fri_openings_target
             .batches
             .iter()
-            .zip_eq(&fri_openings.batches)
+            .zip(&fri_openings.batches)
         {
             self.set_extension_targets(&batch_target.values, &batch.values);
         }
