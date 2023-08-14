@@ -47,12 +47,12 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let start = self.exp_from_bits_const_base(g_inv, x_index_within_coset_bits.iter().rev());
         let coset_start = self.mul(start, x);
 
-        // The answer is gotten by interpolating {(x*g^i, P(x*g^i))} and evaluating at beta.
-        let interpolation_gate = <CosetInterpolationGate<F, D>>::with_max_degree(
+        self.interpolate_coset(
             arity_bits,
-            self.config.max_quotient_degree_factor,
-        );
-        self.interpolate_coset(interpolation_gate, coset_start, &evals, beta)
+            coset_start,
+            &evals,
+            beta,
+        )
     }
 
     /// Make sure we have enough wires and routed wires to do the FRI checks efficiently. This check
