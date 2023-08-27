@@ -130,7 +130,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         C::Hasher: AlgebraicHasher<F>,
     {
         if let Some(max_arity_bits) = params.max_arity_bits() {
-            self.check_recursion_config(max_arity_bits);
+            self.check_recursion_config(max_arity_bits); // TODO: still use CosetInterpolationGate
         }
 
         debug_assert_eq!(
@@ -263,7 +263,13 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             sum = self.div_add_extension(numerator, denominator, sum);
         }
 
-        sum
+        if cfg!(feature = "pr436") {
+            // Multiply the final polynomial by `X`, so that `final_poly` has the maximum degree for
+            // which the LDT will pass. See github.com/mir-protocol/plonky2/pull/436 for details.
+            self.mul_extension(sum, subgroup_x)
+        } else {
+            sum
+        }
     }
 
     fn fri_verifier_query_round<C: GenericConfig<D, F = F>>(

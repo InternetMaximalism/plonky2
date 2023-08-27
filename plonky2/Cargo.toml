@@ -11,13 +11,14 @@ categories = ["cryptography"]
 edition = "2021"
 
 [features]
-default = ["gate_testing", "parallel", "rand_chacha", "std", "timing", "circom_verifier", "solidity_verifier"]
+default = ["gate_testing", "parallel", "rand_chacha", "std", "timing"]
 gate_testing = []
 parallel = ["hashbrown/rayon", "plonky2_maybe_rayon/parallel"]
 std = ["anyhow/std", "hex/std", "rand/std", "rand/std_rng"]
 timing = ["std"]
-circom_verifier = []
-solidity_verifier = []
+pr436 = []
+circom_verifier = ["pr436"]
+solidity_verifier = ["pr436"]
 
 [dependencies]
 ahash = { version = "0.7.6", default-features = false, features = ["compile-time-rng"] } # NOTE: Be sure to keep this version the same as the dependency in `hashbrown`.

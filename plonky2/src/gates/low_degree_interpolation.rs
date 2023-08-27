@@ -15,7 +15,7 @@ use crate::gates::gate::Gate;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
 use crate::iop::ext_target::ExtensionTarget;
-use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGenerator, WitnessGeneratorRef};
+use crate::iop::generator::{GeneratedValues, SimpleGenerator, WitnessGeneratorRef};
 use crate::iop::target::Target;
 use crate::iop::wire::Wire;
 use crate::iop::witness::{PartitionWitness, Witness, WitnessWrite};
@@ -86,11 +86,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for LowDegreeInter
         format!("{self:?}<D={D}>")
     }
 
-    fn serialize(&self, dst: &mut Vec<u8>) -> crate::util::serialization::IoResult<()> {
+    fn serialize(&self, _dst: &mut Vec<u8>) -> crate::util::serialization::IoResult<()> {
         todo!()
     }
 
-    fn deserialize(src: &mut crate::util::serialization::Buffer) -> crate::util::serialization::IoResult<Self>
+    fn deserialize(_src: &mut crate::util::serialization::Buffer) -> crate::util::serialization::IoResult<Self>
     where
         Self: Sized {
         todo!()
