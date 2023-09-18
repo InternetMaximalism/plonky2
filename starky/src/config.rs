@@ -23,12 +23,12 @@ impl StarkConfig {
     pub fn standard_fast_config(
         num_columns: usize,
         num_public_inputs: usize,
-        num_fixed_values: usize,
+        num_fixed_columns: usize,
     ) -> Self {
         Self {
             num_columns,
             num_public_inputs,
-            num_fixed_columns: num_fixed_values,
+            num_fixed_columns,
             security_bits: 100,
             num_challenges: 2,
             fri_config: FriConfig {
