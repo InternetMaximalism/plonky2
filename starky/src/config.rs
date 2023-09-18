@@ -6,7 +6,7 @@ pub struct StarkConfig {
 
     pub num_public_inputs: usize,
 
-    pub num_fixed_values: usize,
+    pub num_fixed_columns: usize,
 
     pub security_bits: usize,
 
@@ -28,7 +28,7 @@ impl StarkConfig {
         Self {
             num_columns,
             num_public_inputs,
-            num_fixed_values,
+            num_fixed_columns: num_fixed_values,
             security_bits: 100,
             num_challenges: 2,
             fri_config: FriConfig {

@@ -200,7 +200,7 @@ where
 
     ensure!(local_values.len() == config.num_columns);
     ensure!(next_values.len() == config.num_columns);
-    ensure!(fixed_values.len() == config.num_fixed_values);
+    ensure!(fixed_values.len() == config.num_fixed_columns);
     ensure!(quotient_polys.len() == stark.num_quotient_polys(config));
 
     if stark.uses_permutation_args() {

@@ -221,7 +221,7 @@ pub fn add_virtual_stark_proof<F: RichField + Extendable<D>, S: Stark<F, D>, con
     let cap_height = fri_params.config.cap_height;
 
     let num_leaves_per_oracle = once(config.num_columns)
-        .chain(once(config.num_fixed_values))
+        .chain(once(config.num_fixed_columns))
         .chain(
             stark
                 .uses_permutation_args()
@@ -253,7 +253,7 @@ fn add_stark_opening_set_target<F: RichField + Extendable<D>, S: Stark<F, D>, co
     StarkOpeningSetTarget {
         local_values: builder.add_virtual_extension_targets(config.num_columns),
         next_values: builder.add_virtual_extension_targets(config.num_columns),
-        fixed_values: builder.add_virtual_extension_targets(config.num_fixed_values),
+        fixed_values: builder.add_virtual_extension_targets(config.num_fixed_columns),
         permutation_zs: stark
             .uses_permutation_args()
             .then(|| builder.add_virtual_extension_targets(stark.num_permutation_batches(config))),

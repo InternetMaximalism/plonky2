@@ -95,9 +95,9 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         });
 
         let fixed_values_info =
-            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_values);
+            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_columns);
         oracles.push(FriOracleInfo {
-            num_polys: config.num_fixed_values,
+            num_polys: config.num_fixed_columns,
             blinding: false,
         });
 
@@ -156,9 +156,9 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         });
 
         let fixed_values_info =
-            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_values);
+            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_columns);
         oracles.push(FriOracleInfo {
-            num_polys: config.num_fixed_values,
+            num_polys: config.num_fixed_columns,
             blinding: false,
         });
 
