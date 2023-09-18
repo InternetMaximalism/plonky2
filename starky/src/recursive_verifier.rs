@@ -5,7 +5,7 @@ use itertools::Itertools;
 use plonky2::field::extension::Extendable;
 use plonky2::field::types::Field;
 use plonky2::fri::witness_util::set_fri_proof_target;
-use plonky2::hash::hash_types::RichField;
+use plonky2::hash::hash_types::{MerkleCapTarget, RichField};
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::iop::witness::WitnessWrite;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
@@ -32,6 +32,7 @@ pub fn verify_stark_proof_circuit<
 >(
     builder: &mut CircuitBuilder<F, D>,
     stark: S,
+    constants_commitment: &MerkleCapTarget,
     proof_with_pis: &StarkProofWithPublicInputsTarget<D>,
     inner_config: &StarkConfig,
 ) where
@@ -49,6 +50,7 @@ pub fn verify_stark_proof_circuit<
     verify_stark_proof_with_challenges_circuit::<F, C, S, D>(
         builder,
         stark,
+        constants_commitment,
         proof_with_pis,
         challenges,
         inner_config,
@@ -65,6 +67,7 @@ fn verify_stark_proof_with_challenges_circuit<
 >(
     builder: &mut CircuitBuilder<F, D>,
     stark: S,
+    constants_commitment: &MerkleCapTarget,
     proof_with_pis: &StarkProofWithPublicInputsTarget<D>,
     challenges: StarkProofChallengesTarget<D>,
     inner_config: &StarkConfig,
@@ -98,6 +101,9 @@ fn verify_stark_proof_with_challenges_circuit<
             .map(|&t| builder.convert_to_ext(t))
             .collect_vec(),
     };
+
+    // assert constants commitment
+    builder.connect_merkle_caps(&proof.constants_cap, constants_commitment);
 
     let zeta_pow_deg = builder.exp_power_of_2_extension(challenges.stark_zeta, degree_bits);
     let z_h_zeta = builder.sub_extension(zeta_pow_deg, one);
