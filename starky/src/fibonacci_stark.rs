@@ -116,6 +116,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for FibonacciStar
     fn permutation_pairs(&self) -> Vec<PermutationPair> {
         vec![PermutationPair::singletons(2, 3)]
     }
+
+    fn fixed_values(&self) -> Vec<PolynomialValues<F>> {
+        let constant_rows = vec![[F::ZERO; 1]; self.num_rows];
+        trace_rows_to_poly_values(constant_rows)
+    }
 }
 
 #[cfg(test)]
@@ -153,10 +158,11 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
         type S = FibonacciStark<F, D>;
 
-        let config = StarkConfig::standard_fast_config(4, 3);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
+        let fixed_values_commitment = stark.get_fixed_values_commitment::<C>(&config);
         let trace = stark.generate_trace(public_inputs[0], public_inputs[1]);
         let proof = prove::<F, C, S, D>(
             stark,
@@ -166,7 +172,7 @@ mod tests {
             &mut TimingTree::default(),
         )?;
 
-        verify_stark_proof(stark, proof, &config)
+        verify_stark_proof(stark, &fixed_values_commitment, proof, &config)
     }
 
     #[test]
@@ -178,7 +184,7 @@ mod tests {
 
         let num_rows = 1 << 5;
         let stark = S::new(num_rows);
-        let config = StarkConfig::standard_fast_config(4, 3);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         test_stark_low_degree(&config, stark)
     }
 
@@ -191,7 +197,7 @@ mod tests {
 
         let num_rows = 1 << 5;
         let stark = S::new(num_rows);
-        let config = StarkConfig::standard_fast_config(4, 3);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         test_stark_circuit_constraints::<F, C, S, D>(&config, stark)
     }
 
@@ -203,10 +209,11 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
         type S = FibonacciStark<F, D>;
 
-        let config = StarkConfig::standard_fast_config(4, 3);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
+        let fixed_values_commitment = stark.get_fixed_values_commitment::<C>(&config);
         let trace = stark.generate_trace(public_inputs[0], public_inputs[1]);
         let proof = prove::<F, C, S, D>(
             stark,
@@ -215,7 +222,7 @@ mod tests {
             public_inputs.to_vec(),
             &mut TimingTree::default(),
         )?;
-        verify_stark_proof(stark, proof.clone(), &config)?;
+        verify_stark_proof(stark, &fixed_values_commitment, proof.clone(), &config)?;
 
         recursive_proof::<F, C, S, C, D>(stark, proof, &config, true)
     }
@@ -241,8 +248,15 @@ mod tests {
         let degree_bits = inner_proof.proof.recover_degree_bits(inner_config);
         let pt = add_virtual_stark_proof_with_pis(&mut builder, stark, inner_config, degree_bits);
         set_stark_proof_with_pis_target(&mut pw, &pt, &inner_proof);
-
-        verify_stark_proof_circuit::<F, InnerC, S, D>(&mut builder, stark, &pt, inner_config);
+        let fixed_values_commitment = builder
+            .constant_merkle_cap(&stark.get_fixed_values_commitment::<InnerC>(&inner_config));
+        verify_stark_proof_circuit::<F, InnerC, S, D>(
+            &mut builder,
+            stark,
+            &fixed_values_commitment,
+            &pt,
+            inner_config,
+        );
 
         if print_gate_counts {
             builder.print_gate_counts(0);

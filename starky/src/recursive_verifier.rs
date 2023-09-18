@@ -5,7 +5,7 @@ use itertools::Itertools;
 use plonky2::field::extension::Extendable;
 use plonky2::field::types::Field;
 use plonky2::fri::witness_util::set_fri_proof_target;
-use plonky2::hash::hash_types::RichField;
+use plonky2::hash::hash_types::{MerkleCapTarget, RichField};
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::iop::witness::WitnessWrite;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
@@ -32,6 +32,7 @@ pub fn verify_stark_proof_circuit<
 >(
     builder: &mut CircuitBuilder<F, D>,
     stark: S,
+    fixed_values_commitment: &MerkleCapTarget,
     proof_with_pis: &StarkProofWithPublicInputsTarget<D>,
     inner_config: &StarkConfig,
 ) where
@@ -49,6 +50,7 @@ pub fn verify_stark_proof_circuit<
     verify_stark_proof_with_challenges_circuit::<F, C, S, D>(
         builder,
         stark,
+        fixed_values_commitment,
         proof_with_pis,
         challenges,
         inner_config,
@@ -65,6 +67,7 @@ fn verify_stark_proof_with_challenges_circuit<
 >(
     builder: &mut CircuitBuilder<F, D>,
     stark: S,
+    fixed_values_commitment: &MerkleCapTarget,
     proof_with_pis: &StarkProofWithPublicInputsTarget<D>,
     challenges: StarkProofChallengesTarget<D>,
     inner_config: &StarkConfig,
@@ -82,6 +85,7 @@ fn verify_stark_proof_with_challenges_circuit<
     let StarkOpeningSetTarget {
         local_values,
         next_values,
+        fixed_values,
         permutation_zs,
         permutation_zs_next,
         quotient_polys,
@@ -89,11 +93,15 @@ fn verify_stark_proof_with_challenges_circuit<
     let vars: StarkEvaluationTargets<'_, D> = StarkEvaluationTargets {
         local_values: &local_values,
         next_values: &next_values,
+        fixed_values: &fixed_values,
         public_inputs: &public_inputs
             .into_iter()
             .map(|&t| builder.convert_to_ext(t))
             .collect_vec(),
     };
+
+    // assert fixed_values commitment
+    builder.connect_merkle_caps(&proof.fixed_values_cap, fixed_values_commitment);
 
     let zeta_pow_deg = builder.exp_power_of_2_extension(challenges.stark_zeta, degree_bits);
     let z_h_zeta = builder.sub_extension(zeta_pow_deg, one);
@@ -145,6 +153,7 @@ fn verify_stark_proof_with_challenges_circuit<
     }
 
     let merkle_caps = once(proof.trace_cap.clone())
+        .chain(once(proof.fixed_values_cap.clone()))
         .chain(proof.permutation_zs_cap.clone())
         .chain(once(proof.quotient_polys_cap.clone()))
         .collect_vec();
@@ -212,6 +221,7 @@ pub fn add_virtual_stark_proof<F: RichField + Extendable<D>, S: Stark<F, D>, con
     let cap_height = fri_params.config.cap_height;
 
     let num_leaves_per_oracle = once(config.num_columns)
+        .chain(once(config.num_fixed_columns))
         .chain(
             stark
                 .uses_permutation_args()
@@ -226,6 +236,7 @@ pub fn add_virtual_stark_proof<F: RichField + Extendable<D>, S: Stark<F, D>, con
 
     StarkProofTarget {
         trace_cap: builder.add_virtual_cap(cap_height),
+        fixed_values_cap: builder.add_virtual_cap(cap_height),
         permutation_zs_cap,
         quotient_polys_cap: builder.add_virtual_cap(cap_height),
         openings: add_stark_opening_set_target::<F, S, D>(builder, stark, config),
@@ -242,6 +253,7 @@ fn add_stark_opening_set_target<F: RichField + Extendable<D>, S: Stark<F, D>, co
     StarkOpeningSetTarget {
         local_values: builder.add_virtual_extension_targets(config.num_columns),
         next_values: builder.add_virtual_extension_targets(config.num_columns),
+        fixed_values: builder.add_virtual_extension_targets(config.num_fixed_columns),
         permutation_zs: stark
             .uses_permutation_args()
             .then(|| builder.add_virtual_extension_targets(stark.num_permutation_batches(config))),
@@ -271,6 +283,7 @@ pub fn set_stark_proof_with_pis_target<F, C: GenericConfig<D, F = F>, W, const D
         public_inputs: pi_targets,
     } = stark_proof_with_pis_target;
 
+    assert_eq!(public_inputs.len(), pi_targets.len());
     // Set public inputs.
     for (&pi_t, &pi) in pi_targets.iter().zip_eq(public_inputs) {
         witness.set_target(pi_t, pi);
@@ -289,6 +302,7 @@ pub fn set_stark_proof_target<F, C: GenericConfig<D, F = F>, W, const D: usize>(
     W: WitnessWrite<F>,
 {
     witness.set_cap_target(&proof_target.trace_cap, &proof.trace_cap);
+    witness.set_cap_target(&proof_target.fixed_values_cap, &proof.fixed_values_cap);
     witness.set_cap_target(&proof_target.quotient_polys_cap, &proof.quotient_polys_cap);
 
     witness.set_fri_openings(
