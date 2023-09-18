@@ -162,6 +162,7 @@ mod tests {
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
+        let constants_commitment = stark.get_constants_commitment::<C>(&config);
         let trace = stark.generate_trace(public_inputs[0], public_inputs[1]);
         let proof = prove::<F, C, S, D>(
             stark,
@@ -171,7 +172,7 @@ mod tests {
             &mut TimingTree::default(),
         )?;
 
-        verify_stark_proof(stark, proof, &config)
+        verify_stark_proof(stark, &constants_commitment, proof, &config)
     }
 
     #[test]
@@ -212,6 +213,7 @@ mod tests {
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
+        let constants_commitment = stark.get_constants_commitment::<C>(&config);
         let trace = stark.generate_trace(public_inputs[0], public_inputs[1]);
         let proof = prove::<F, C, S, D>(
             stark,
@@ -220,7 +222,7 @@ mod tests {
             public_inputs.to_vec(),
             &mut TimingTree::default(),
         )?;
-        verify_stark_proof(stark, proof.clone(), &config)?;
+        verify_stark_proof(stark, &constants_commitment, proof.clone(), &config)?;
 
         recursive_proof::<F, C, S, C, D>(stark, proof, &config, true)
     }

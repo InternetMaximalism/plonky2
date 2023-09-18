@@ -7,6 +7,7 @@ use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::field::types::Field;
 use plonky2::fri::verifier::verify_fri_proof;
 use plonky2::hash::hash_types::RichField;
+use plonky2::hash::merkle_tree::MerkleCap;
 use plonky2::plonk::config::GenericConfig;
 use plonky2::plonk::plonk_common::reduce_with_powers;
 
@@ -25,13 +26,21 @@ pub fn verify_stark_proof<
     const D: usize,
 >(
     stark: S,
+    constants_commitment: &MerkleCap<F, C::Hasher>,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     config: &StarkConfig,
 ) -> Result<()> {
     ensure!(proof_with_pis.public_inputs.len() == config.num_public_inputs);
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
     let challenges = proof_with_pis.get_challenges(&stark, config, degree_bits);
-    verify_stark_proof_with_challenges(stark, proof_with_pis, challenges, degree_bits, config)
+    verify_stark_proof_with_challenges(
+        stark,
+        constants_commitment,
+        proof_with_pis,
+        challenges,
+        degree_bits,
+        config,
+    )
 }
 
 pub(crate) fn verify_stark_proof_with_challenges<
@@ -41,6 +50,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     const D: usize,
 >(
     stark: S,
+    constants_commitment: &MerkleCap<F, C::Hasher>,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     challenges: StarkProofChallenges<F, D>,
     degree_bits: usize,
@@ -71,6 +81,11 @@ pub(crate) fn verify_stark_proof_with_challenges<
             .map(F::Extension::from_basefield)
             .collect_vec(),
     };
+
+    assert_eq!(
+        &proof.constants_cap, constants_commitment,
+        "Invalid constants commitment"
+    );
 
     let (l_0, l_last) = eval_l_0_and_l_last(degree_bits, challenges.stark_zeta);
     let last = F::primitive_root_of_unity(degree_bits).inverse();
