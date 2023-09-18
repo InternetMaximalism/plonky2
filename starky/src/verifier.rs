@@ -26,7 +26,7 @@ pub fn verify_stark_proof<
     const D: usize,
 >(
     stark: S,
-    constants_commitment: &MerkleCap<F, C::Hasher>,
+    fixed_values_commitment: &MerkleCap<F, C::Hasher>,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     config: &StarkConfig,
 ) -> Result<()> {
@@ -35,7 +35,7 @@ pub fn verify_stark_proof<
     let challenges = proof_with_pis.get_challenges(&stark, config, degree_bits);
     verify_stark_proof_with_challenges(
         stark,
-        constants_commitment,
+        fixed_values_commitment,
         proof_with_pis,
         challenges,
         degree_bits,
@@ -50,7 +50,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     const D: usize,
 >(
     stark: S,
-    constants_commitment: &MerkleCap<F, C::Hasher>,
+    fixed_values_commitment: &MerkleCap<F, C::Hasher>,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     challenges: StarkProofChallenges<F, D>,
     degree_bits: usize,
@@ -65,7 +65,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     let StarkOpeningSet {
         local_values,
         next_values,
-        constants,
+        fixed_values,
         permutation_zs,
         permutation_zs_next,
         quotient_polys,
@@ -73,7 +73,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     let vars = StarkEvaluationVars {
         local_values: &local_values,
         next_values: &next_values,
-        constants: &constants,
+        fixed_values: &fixed_values,
         public_inputs: &public_inputs
             .into_iter()
             .map(F::Extension::from_basefield)
@@ -81,8 +81,8 @@ pub(crate) fn verify_stark_proof_with_challenges<
     };
 
     assert_eq!(
-        &proof.constants_cap, constants_commitment,
-        "Invalid constants commitment"
+        &proof.fixed_values_cap, fixed_values_commitment,
+        "Invalid fixed_values commitment"
     );
 
     let (l_0, l_last) = eval_l_0_and_l_last(degree_bits, challenges.stark_zeta);
@@ -131,7 +131,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     }
 
     let merkle_caps = once(proof.trace_cap)
-        .chain(once(proof.constants_cap))
+        .chain(once(proof.fixed_values_cap))
         .chain(proof.permutation_zs_cap)
         .chain(once(proof.quotient_polys_cap))
         .collect_vec();
@@ -170,7 +170,7 @@ where
 
     let StarkProof {
         trace_cap,
-        constants_cap,
+        fixed_values_cap,
         permutation_zs_cap,
         quotient_polys_cap,
         openings,
@@ -182,7 +182,7 @@ where
     let StarkOpeningSet {
         local_values,
         next_values,
-        constants,
+        fixed_values,
         permutation_zs,
         permutation_zs_next,
         quotient_polys,
@@ -195,12 +195,12 @@ where
     let num_zs = stark.num_permutation_batches(config);
 
     ensure!(trace_cap.height() == cap_height);
-    ensure!(constants_cap.height() == cap_height);
+    ensure!(fixed_values_cap.height() == cap_height);
     ensure!(quotient_polys_cap.height() == cap_height);
 
     ensure!(local_values.len() == config.num_columns);
     ensure!(next_values.len() == config.num_columns);
-    ensure!(constants.len() == config.num_constants);
+    ensure!(fixed_values.len() == config.num_fixed_values);
     ensure!(quotient_polys.len() == stark.num_quotient_polys(config));
 
     if stark.uses_permutation_args() {

@@ -22,8 +22,8 @@ use crate::permutation::PermutationChallengeSet;
 pub struct StarkProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
     /// Merkle cap of LDEs of trace values.
     pub trace_cap: MerkleCap<F, C::Hasher>,
-    /// Merkle cap of LDEs of constants.
-    pub constants_cap: MerkleCap<F, C::Hasher>,
+    /// Merkle cap of LDEs of fixed_values.
+    pub fixed_values_cap: MerkleCap<F, C::Hasher>,
     /// Merkle cap of LDEs of permutation Z values.
     pub permutation_zs_cap: Option<MerkleCap<F, C::Hasher>>,
     /// Merkle cap of LDEs of trace values.
@@ -49,7 +49,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> S
 #[derive(Clone, Debug)]
 pub struct StarkProofTarget<const D: usize> {
     pub trace_cap: MerkleCapTarget,
-    pub constants_cap: MerkleCapTarget,
+    pub fixed_values_cap: MerkleCapTarget,
     pub permutation_zs_cap: Option<MerkleCapTarget>,
     pub quotient_polys_cap: MerkleCapTarget,
     pub openings: StarkOpeningSetTarget<D>,
@@ -110,7 +110,7 @@ pub(crate) struct StarkProofChallengesTarget<const D: usize> {
 pub struct StarkOpeningSet<F: RichField + Extendable<D>, const D: usize> {
     pub local_values: Vec<F::Extension>,
     pub next_values: Vec<F::Extension>,
-    pub constants: Vec<F::Extension>,
+    pub fixed_values: Vec<F::Extension>,
     pub permutation_zs: Option<Vec<F::Extension>>,
     pub permutation_zs_next: Option<Vec<F::Extension>>,
     pub quotient_polys: Vec<F::Extension>,
@@ -121,7 +121,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
         zeta: F::Extension,
         g: F,
         trace_commitment: &PolynomialBatch<F, C, D>,
-        constants_commitment: &PolynomialBatch<F, C, D>,
+        fixed_values_commitment: &PolynomialBatch<F, C, D>,
         permutation_zs_commitment: Option<&PolynomialBatch<F, C, D>>,
         quotient_commitment: &PolynomialBatch<F, C, D>,
     ) -> Self {
@@ -135,7 +135,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
         Self {
             local_values: eval_commitment(zeta, trace_commitment),
             next_values: eval_commitment(zeta_next, trace_commitment),
-            constants: eval_commitment(zeta, constants_commitment),
+            fixed_values: eval_commitment(zeta, fixed_values_commitment),
             permutation_zs: permutation_zs_commitment.map(|c| eval_commitment(zeta, c)),
             permutation_zs_next: permutation_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
             quotient_polys: eval_commitment(zeta, quotient_commitment),
@@ -147,7 +147,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             values: self
                 .local_values
                 .iter()
-                .chain(self.constants.iter())
+                .chain(self.fixed_values.iter())
                 .chain(self.permutation_zs.iter().flatten())
                 .chain(&self.quotient_polys)
                 .copied()
@@ -171,7 +171,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
 pub struct StarkOpeningSetTarget<const D: usize> {
     pub local_values: Vec<ExtensionTarget<D>>,
     pub next_values: Vec<ExtensionTarget<D>>,
-    pub constants: Vec<ExtensionTarget<D>>,
+    pub fixed_values: Vec<ExtensionTarget<D>>,
     pub permutation_zs: Option<Vec<ExtensionTarget<D>>>,
     pub permutation_zs_next: Option<Vec<ExtensionTarget<D>>>,
     pub quotient_polys: Vec<ExtensionTarget<D>>,
@@ -183,7 +183,7 @@ impl<const D: usize> StarkOpeningSetTarget<D> {
             values: self
                 .local_values
                 .iter()
-                .chain(self.constants.iter())
+                .chain(self.fixed_values.iter())
                 .chain(self.permutation_zs.iter().flatten())
                 .chain(&self.quotient_polys)
                 .copied()

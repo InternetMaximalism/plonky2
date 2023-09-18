@@ -117,7 +117,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for FibonacciStar
         vec![PermutationPair::singletons(2, 3)]
     }
 
-    fn constants(&self) -> Vec<PolynomialValues<F>> {
+    fn fixed_values(&self) -> Vec<PolynomialValues<F>> {
         let constant_rows = vec![[F::ZERO; 1]; self.num_rows];
         trace_rows_to_poly_values(constant_rows)
     }
@@ -162,7 +162,7 @@ mod tests {
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
-        let constants_commitment = stark.get_constants_commitment::<C>(&config);
+        let fixed_values_commitment = stark.get_fixed_values_commitment::<C>(&config);
         let trace = stark.generate_trace(public_inputs[0], public_inputs[1]);
         let proof = prove::<F, C, S, D>(
             stark,
@@ -172,7 +172,7 @@ mod tests {
             &mut TimingTree::default(),
         )?;
 
-        verify_stark_proof(stark, &constants_commitment, proof, &config)
+        verify_stark_proof(stark, &fixed_values_commitment, proof, &config)
     }
 
     #[test]
@@ -213,7 +213,7 @@ mod tests {
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
-        let constants_commitment = stark.get_constants_commitment::<C>(&config);
+        let fixed_values_commitment = stark.get_fixed_values_commitment::<C>(&config);
         let trace = stark.generate_trace(public_inputs[0], public_inputs[1]);
         let proof = prove::<F, C, S, D>(
             stark,
@@ -222,7 +222,7 @@ mod tests {
             public_inputs.to_vec(),
             &mut TimingTree::default(),
         )?;
-        verify_stark_proof(stark, &constants_commitment, proof.clone(), &config)?;
+        verify_stark_proof(stark, &fixed_values_commitment, proof.clone(), &config)?;
 
         recursive_proof::<F, C, S, C, D>(stark, proof, &config, true)
     }
@@ -248,12 +248,12 @@ mod tests {
         let degree_bits = inner_proof.proof.recover_degree_bits(inner_config);
         let pt = add_virtual_stark_proof_with_pis(&mut builder, stark, inner_config, degree_bits);
         set_stark_proof_with_pis_target(&mut pw, &pt, &inner_proof);
-        let constants_commitment =
-            builder.constant_merkle_cap(&stark.get_constants_commitment::<InnerC>(&inner_config));
+        let fixed_values_commitment = builder
+            .constant_merkle_cap(&stark.get_fixed_values_commitment::<InnerC>(&inner_config));
         verify_stark_proof_circuit::<F, InnerC, S, D>(
             &mut builder,
             stark,
-            &constants_commitment,
+            &fixed_values_commitment,
             &pt,
             inner_config,
         );

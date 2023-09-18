@@ -94,9 +94,10 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             blinding: false,
         });
 
-        let constants_info = FriPolynomialInfo::from_range(oracles.len(), 0..config.num_constants);
+        let fixed_values_info =
+            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_values);
         oracles.push(FriOracleInfo {
-            num_polys: config.num_constants,
+            num_polys: config.num_fixed_values,
             blinding: false,
         });
 
@@ -123,7 +124,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             point: zeta,
             polynomials: [
                 trace_info.clone(),
-                constants_info.clone(),
+                fixed_values_info.clone(),
                 permutation_zs_info.clone(),
                 quotient_info,
             ]
@@ -154,9 +155,10 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             blinding: false,
         });
 
-        let constants_info = FriPolynomialInfo::from_range(oracles.len(), 0..config.num_constants);
+        let fixed_values_info =
+            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_values);
         oracles.push(FriOracleInfo {
-            num_polys: config.num_constants,
+            num_polys: config.num_fixed_values,
             blinding: false,
         });
 
@@ -183,7 +185,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             point: zeta,
             polynomials: [
                 trace_info.clone(),
-                constants_info.clone(),
+                fixed_values_info.clone(),
                 permutation_zs_info.clone(),
                 quotient_info,
             ]
@@ -229,23 +231,23 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         )
     }
 
-    fn constants(&self) -> Vec<PolynomialValues<F>>;
+    fn fixed_values(&self) -> Vec<PolynomialValues<F>>;
 
-    fn get_constants_commitment<C: GenericConfig<D, F = F>>(
+    fn get_fixed_values_commitment<C: GenericConfig<D, F = F>>(
         &self,
         config: &StarkConfig,
     ) -> MerkleCap<F, C::Hasher> {
         let rate_bits = config.fri_config.rate_bits;
         let cap_height = config.fri_config.cap_height;
         let mut timing = TimingTree::default();
-        let constants_commitment = PolynomialBatch::<F, C, D>::from_values(
-            self.constants(),
+        let fixed_values_commitment = PolynomialBatch::<F, C, D>::from_values(
+            self.fixed_values(),
             rate_bits,
             false,
             cap_height,
             &mut timing,
             None,
         );
-        constants_commitment.merkle_tree.cap
+        fixed_values_commitment.merkle_tree.cap
     }
 }

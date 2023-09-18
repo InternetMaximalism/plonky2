@@ -10,7 +10,7 @@ where
 {
     pub local_values: &'a [P],
     pub next_values: &'a [P],
-    pub constants: &'a [P],
+    pub fixed_values: &'a [P],
     pub public_inputs: &'a [P::Scalar],
 }
 
@@ -18,6 +18,6 @@ where
 pub struct StarkEvaluationTargets<'a, const D: usize> {
     pub local_values: &'a [ExtensionTarget<D>],
     pub next_values: &'a [ExtensionTarget<D>],
-    pub constants: &'a [ExtensionTarget<D>],
+    pub fixed_values: &'a [ExtensionTarget<D>],
     pub public_inputs: &'a [ExtensionTarget<D>],
 }

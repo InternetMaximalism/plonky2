@@ -58,8 +58,11 @@ where
         fri_params.total_arities() <= degree_bits + rate_bits - cap_height,
         "FRI total reduction arity is too large.",
     );
-    let constants = stark.constants();
-    assert!(constants.len() >= 1, "Constants should exist at least one!");
+    let fixed_values = stark.fixed_values();
+    assert!(
+        fixed_values.len() >= 1,
+        "fixed_values should exist at least one!"
+    );
 
     let trace_commitment = timed!(
         timing,
@@ -81,15 +84,20 @@ where
     challenger.observe_cap(&trace_cap);
 
     // commit constraints
-    let constants_commitment = timed!(
+    let fixed_values_commitment = timed!(
         timing,
-        "compute constants commitment",
+        "compute fixed_values commitment",
         PolynomialBatch::<F, C, D>::from_values(
-            constants, rate_bits, false, cap_height, timing, None,
+            fixed_values,
+            rate_bits,
+            false,
+            cap_height,
+            timing,
+            None,
         )
     );
-    let constants_cap = constants_commitment.merkle_tree.cap.clone();
-    challenger.observe_cap(&constants_cap);
+    let fixed_values_cap = fixed_values_commitment.merkle_tree.cap.clone();
+    challenger.observe_cap(&fixed_values_cap);
 
     // Permutation arguments.
     let permutation_zs_commitment_challenges = stark.uses_permutation_args().then(|| {
@@ -133,7 +141,7 @@ where
     let quotient_polys = compute_quotient_polys::<F, <F as Packable>::Packing, C, S, D>(
         &stark,
         &trace_commitment,
-        &constants_commitment,
+        &fixed_values_commitment,
         &permutation_zs_commitment_challenges,
         public_inputs.clone(),
         alphas,
@@ -178,14 +186,14 @@ where
         zeta,
         g,
         &trace_commitment,
-        &constants_commitment,
+        &fixed_values_commitment,
         permutation_zs_commitment,
         &quotient_commitment,
     );
     challenger.observe_openings(&openings.to_fri_openings());
 
     let initial_merkle_trees = once(&trace_commitment)
-        .chain(once(&constants_commitment))
+        .chain(once(&fixed_values_commitment))
         .chain(permutation_zs_commitment)
         .chain(once(&quotient_commitment))
         .collect_vec();
@@ -203,7 +211,7 @@ where
     );
     let proof = StarkProof {
         trace_cap,
-        constants_cap,
+        fixed_values_cap,
         permutation_zs_cap,
         quotient_polys_cap,
         openings,
@@ -221,7 +229,7 @@ where
 fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     stark: &S,
     trace_commitment: &'a PolynomialBatch<F, C, D>,
-    constants_commitment: &'a PolynomialBatch<F, C, D>,
+    fixed_values_commitment: &'a PolynomialBatch<F, C, D>,
     permutation_zs_commitment_challenges: &'a Option<(
         PolynomialBatch<F, C, D>,
         Vec<PermutationChallengeSet<F>>,
@@ -265,8 +273,8 @@ where
             .try_into()
             .unwrap()
     };
-    let get_constants_packed = |i_start| -> Vec<P> {
-        constants_commitment
+    let get_fixed_values_packed = |i_start| -> Vec<P> {
+        fixed_values_commitment
             .get_lde_values_packed(i_start, step)
             .try_into()
             .unwrap()
@@ -304,7 +312,7 @@ where
             let vars = StarkEvaluationVars {
                 local_values: &get_trace_values_packed(i_start),
                 next_values: &get_trace_values_packed(i_next_start),
-                constants: &get_constants_packed(i_start),
+                fixed_values: &get_fixed_values_packed(i_start),
                 public_inputs: &public_inputs,
             };
             let permutation_check_data = permutation_zs_commitment_challenges.as_ref().map(

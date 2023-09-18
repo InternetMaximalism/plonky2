@@ -21,7 +21,7 @@ use crate::stark::Stark;
 fn get_challenges<F, C, S, const D: usize>(
     stark: &S,
     trace_cap: &MerkleCap<F, C::Hasher>,
-    constants_cap: &MerkleCap<F, C::Hasher>,
+    fixed_values_cap: &MerkleCap<F, C::Hasher>,
     permutation_zs_cap: Option<&MerkleCap<F, C::Hasher>>,
     quotient_polys_cap: &MerkleCap<F, C::Hasher>,
     openings: &StarkOpeningSet<F, D>,
@@ -41,7 +41,7 @@ where
     let mut challenger = Challenger::<F, C::Hasher>::new();
 
     challenger.observe_cap(trace_cap);
-    challenger.observe_cap(constants_cap);
+    challenger.observe_cap(fixed_values_cap);
 
     let permutation_challenge_sets = permutation_zs_cap.map(|permutation_zs_cap| {
         let tmp = get_n_permutation_challenge_sets(
@@ -101,7 +101,7 @@ where
     ) -> StarkProofChallenges<F, D> {
         let StarkProof {
             trace_cap,
-            constants_cap,
+            fixed_values_cap,
             permutation_zs_cap,
             quotient_polys_cap,
             openings,
@@ -117,7 +117,7 @@ where
         get_challenges::<F, C, S, D>(
             stark,
             trace_cap,
-            constants_cap,
+            fixed_values_cap,
             permutation_zs_cap.as_ref(),
             quotient_polys_cap,
             openings,
@@ -140,7 +140,7 @@ pub(crate) fn get_challenges_target<
     builder: &mut CircuitBuilder<F, D>,
     stark: &S,
     trace_cap: &MerkleCapTarget,
-    constants_cap: &MerkleCapTarget,
+    fixed_values_cap: &MerkleCapTarget,
     permutation_zs_cap: Option<&MerkleCapTarget>,
     quotient_polys_cap: &MerkleCapTarget,
     openings: &StarkOpeningSetTarget<D>,
@@ -157,7 +157,7 @@ where
     let mut challenger = RecursiveChallenger::<F, C::Hasher, D>::new(builder);
 
     challenger.observe_cap(trace_cap);
-    challenger.observe_cap(constants_cap);
+    challenger.observe_cap(fixed_values_cap);
 
     let permutation_challenge_sets = permutation_zs_cap.map(|permutation_zs_cap| {
         let tmp = get_n_permutation_challenge_sets_target(
@@ -207,7 +207,7 @@ impl<const D: usize> StarkProofWithPublicInputsTarget<D> {
     {
         let StarkProofTarget {
             trace_cap,
-            constants_cap,
+            fixed_values_cap,
             permutation_zs_cap,
             quotient_polys_cap,
             openings,
@@ -224,7 +224,7 @@ impl<const D: usize> StarkProofWithPublicInputsTarget<D> {
             builder,
             stark,
             trace_cap,
-            constants_cap,
+            fixed_values_cap,
             permutation_zs_cap.as_ref(),
             quotient_polys_cap,
             openings,
