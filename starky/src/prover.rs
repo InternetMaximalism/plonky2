@@ -58,6 +58,8 @@ where
         fri_params.total_arities() <= degree_bits + rate_bits - cap_height,
         "FRI total reduction arity is too large.",
     );
+    let constants = stark.constants();
+    assert!(constants.len() >= 1, "Constants should exist at least one!");
 
     let trace_commitment = timed!(
         timing,
@@ -83,12 +85,7 @@ where
         timing,
         "compute constants commitment",
         PolynomialBatch::<F, C, D>::from_values(
-            stark.constants(),
-            rate_bits,
-            false,
-            cap_height,
-            timing,
-            None,
+            constants, rate_bits, false, cap_height, timing, None,
         )
     );
     let constants_cap = constants_commitment.merkle_tree.cap.clone();
