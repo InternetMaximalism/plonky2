@@ -217,6 +217,7 @@ pub fn add_virtual_stark_proof<F: RichField + Extendable<D>, S: Stark<F, D>, con
     let cap_height = fri_params.config.cap_height;
 
     let num_leaves_per_oracle = once(config.num_columns)
+        .chain(once(config.num_constants))
         .chain(
             stark
                 .uses_permutation_args()
