@@ -116,6 +116,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for FibonacciStar
     fn permutation_pairs(&self) -> Vec<PermutationPair> {
         vec![PermutationPair::singletons(2, 3)]
     }
+
+    fn constants(&self) -> Vec<PolynomialValues<F>> {
+        let constant_rows = vec![[F::ZERO; 1]; self.num_rows];
+        trace_rows_to_poly_values(constant_rows)
+    }
 }
 
 #[cfg(test)]
@@ -153,7 +158,7 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
         type S = FibonacciStark<F, D>;
 
-        let config = StarkConfig::standard_fast_config(4, 3);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
@@ -178,7 +183,7 @@ mod tests {
 
         let num_rows = 1 << 5;
         let stark = S::new(num_rows);
-        let config = StarkConfig::standard_fast_config(4, 3);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         test_stark_low_degree(&config, stark)
     }
 
@@ -191,7 +196,7 @@ mod tests {
 
         let num_rows = 1 << 5;
         let stark = S::new(num_rows);
-        let config = StarkConfig::standard_fast_config(4, 3);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         test_stark_circuit_constraints::<F, C, S, D>(&config, stark)
     }
 
@@ -203,7 +208,7 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
         type S = FibonacciStark<F, D>;
 
-        let config = StarkConfig::standard_fast_config(4, 3);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);

@@ -4,9 +4,7 @@ use alloc::vec::Vec;
 use itertools::Itertools;
 use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::fri::oracle::PolynomialBatch;
-use plonky2::fri::proof::{
-    CompressedFriProof, FriChallenges, FriChallengesTarget, FriProof, FriProofTarget,
-};
+use plonky2::fri::proof::{FriChallenges, FriChallengesTarget, FriProof, FriProofTarget};
 use plonky2::fri::structure::{
     FriOpeningBatch, FriOpeningBatchTarget, FriOpenings, FriOpeningsTarget,
 };
@@ -24,6 +22,8 @@ use crate::permutation::PermutationChallengeSet;
 pub struct StarkProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
     /// Merkle cap of LDEs of trace values.
     pub trace_cap: MerkleCap<F, C::Hasher>,
+    /// Merkle cap of LDEs of constants.
+    pub constants_cap: MerkleCap<F, C::Hasher>,
     /// Merkle cap of LDEs of permutation Z values.
     pub permutation_zs_cap: Option<MerkleCap<F, C::Hasher>>,
     /// Merkle cap of LDEs of trace values.
@@ -49,6 +49,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> S
 #[derive(Clone, Debug)]
 pub struct StarkProofTarget<const D: usize> {
     pub trace_cap: MerkleCapTarget,
+    pub constants_cap: MerkleCapTarget,
     pub permutation_zs_cap: Option<MerkleCapTarget>,
     pub quotient_polys_cap: MerkleCapTarget,
     pub openings: StarkOpeningSetTarget<D>,
@@ -84,28 +85,6 @@ pub struct StarkProofWithPublicInputsTarget<const D: usize> {
     pub public_inputs: Vec<Target>,
 }
 
-pub struct CompressedStarkProof<
-    F: RichField + Extendable<D>,
-    C: GenericConfig<D, F = F>,
-    const D: usize,
-> {
-    /// Merkle cap of LDEs of trace values.
-    pub trace_cap: MerkleCap<F, C::Hasher>,
-    /// Purported values of each polynomial at the challenge point.
-    pub openings: StarkOpeningSet<F, D>,
-    /// A batch FRI argument for all openings.
-    pub opening_proof: CompressedFriProof<F, C::Hasher, D>,
-}
-
-pub struct CompressedStarkProofWithPublicInputs<
-    F: RichField + Extendable<D>,
-    C: GenericConfig<D, F = F>,
-    const D: usize,
-> {
-    pub proof: CompressedStarkProof<F, C, D>,
-    pub public_inputs: Vec<F>,
-}
-
 pub(crate) struct StarkProofChallenges<F: RichField + Extendable<D>, const D: usize> {
     /// Randomness used in any permutation arguments.
     pub permutation_challenge_sets: Option<Vec<PermutationChallengeSet<F>>>,
@@ -131,6 +110,8 @@ pub(crate) struct StarkProofChallengesTarget<const D: usize> {
 pub struct StarkOpeningSet<F: RichField + Extendable<D>, const D: usize> {
     pub local_values: Vec<F::Extension>,
     pub next_values: Vec<F::Extension>,
+    pub constants: Vec<F::Extension>,
+    pub next_constants: Vec<F::Extension>,
     pub permutation_zs: Option<Vec<F::Extension>>,
     pub permutation_zs_next: Option<Vec<F::Extension>>,
     pub quotient_polys: Vec<F::Extension>,
@@ -141,6 +122,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
         zeta: F::Extension,
         g: F,
         trace_commitment: &PolynomialBatch<F, C, D>,
+        constants_commitment: &PolynomialBatch<F, C, D>,
         permutation_zs_commitment: Option<&PolynomialBatch<F, C, D>>,
         quotient_commitment: &PolynomialBatch<F, C, D>,
     ) -> Self {
@@ -154,6 +136,8 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
         Self {
             local_values: eval_commitment(zeta, trace_commitment),
             next_values: eval_commitment(zeta_next, trace_commitment),
+            constants: eval_commitment(zeta, constants_commitment),
+            next_constants: eval_commitment(zeta_next, constants_commitment),
             permutation_zs: permutation_zs_commitment.map(|c| eval_commitment(zeta, c)),
             permutation_zs_next: permutation_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
             quotient_polys: eval_commitment(zeta, quotient_commitment),
@@ -165,6 +149,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             values: self
                 .local_values
                 .iter()
+                .chain(self.constants.iter())
                 .chain(self.permutation_zs.iter().flatten())
                 .chain(&self.quotient_polys)
                 .copied()
@@ -174,6 +159,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             values: self
                 .next_values
                 .iter()
+                .chain(self.next_constants.iter())
                 .chain(self.permutation_zs_next.iter().flatten())
                 .copied()
                 .collect_vec(),
@@ -188,6 +174,8 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
 pub struct StarkOpeningSetTarget<const D: usize> {
     pub local_values: Vec<ExtensionTarget<D>>,
     pub next_values: Vec<ExtensionTarget<D>>,
+    pub constants: Vec<ExtensionTarget<D>>,
+    pub next_constants: Vec<ExtensionTarget<D>>,
     pub permutation_zs: Option<Vec<ExtensionTarget<D>>>,
     pub permutation_zs_next: Option<Vec<ExtensionTarget<D>>>,
     pub quotient_polys: Vec<ExtensionTarget<D>>,
@@ -199,6 +187,7 @@ impl<const D: usize> StarkOpeningSetTarget<D> {
             values: self
                 .local_values
                 .iter()
+                .chain(self.constants.iter())
                 .chain(self.permutation_zs.iter().flatten())
                 .chain(&self.quotient_polys)
                 .copied()
@@ -208,6 +197,7 @@ impl<const D: usize> StarkOpeningSetTarget<D> {
             values: self
                 .next_values
                 .iter()
+                .chain(self.next_constants.iter())
                 .chain(self.permutation_zs_next.iter().flatten())
                 .copied()
                 .collect_vec(),

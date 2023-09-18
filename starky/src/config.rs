@@ -6,6 +6,8 @@ pub struct StarkConfig {
 
     pub num_public_inputs: usize,
 
+    pub num_constants: usize,
+
     pub security_bits: usize,
 
     /// The number of challenge points to generate, for IOPs that have soundness errors of (roughly)
@@ -18,10 +20,15 @@ pub struct StarkConfig {
 impl StarkConfig {
     /// A typical configuration with a rate of 2, resulting in fast but large proofs.
     /// Targets ~100 bit conjectured security.
-    pub fn standard_fast_config(num_columns: usize, num_public_inputs: usize) -> Self {
+    pub fn standard_fast_config(
+        num_columns: usize,
+        num_public_inputs: usize,
+        num_constants: usize,
+    ) -> Self {
         Self {
             num_columns,
             num_public_inputs,
+            num_constants,
             security_bits: 100,
             num_challenges: 2,
             fri_config: FriConfig {

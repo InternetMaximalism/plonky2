@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 
 use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::field::packed::PackedField;
+use plonky2::field::polynomial::PolynomialValues;
 use plonky2::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriOracleInfo,
     FriPolynomialInfo,
@@ -89,6 +90,12 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             blinding: false,
         });
 
+        let constants_info = FriPolynomialInfo::from_range(oracles.len(), 0..config.num_constants);
+        oracles.push(FriOracleInfo {
+            num_polys: config.num_constants,
+            blinding: false,
+        });
+
         let permutation_zs_info = if self.uses_permutation_args() {
             let num_z_polys = self.num_permutation_batches(config);
             let polys = FriPolynomialInfo::from_range(oracles.len(), 0..num_z_polys);
@@ -112,6 +119,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             point: zeta,
             polynomials: [
                 trace_info.clone(),
+                constants_info.clone(),
                 permutation_zs_info.clone(),
                 quotient_info,
             ]
@@ -119,7 +127,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         };
         let zeta_next_batch = FriBatchInfo {
             point: zeta.scalar_mul(g),
-            polynomials: [trace_info, permutation_zs_info].concat(),
+            polynomials: [trace_info, constants_info, permutation_zs_info].concat(),
         };
         let batches = vec![zeta_batch, zeta_next_batch];
 
@@ -209,4 +217,6 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             self.permutation_batch_size(),
         )
     }
+
+    fn constants(&self) -> Vec<PolynomialValues<F>>;
 }
