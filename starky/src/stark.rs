@@ -131,7 +131,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         };
         let zeta_next_batch = FriBatchInfo {
             point: zeta.scalar_mul(g),
-            polynomials: [trace_info, constants_info, permutation_zs_info].concat(),
+            polynomials: [trace_info, permutation_zs_info].concat(),
         };
         let batches = vec![zeta_batch, zeta_next_batch];
 
@@ -192,7 +192,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let zeta_next = builder.mul_const_extension(g, zeta);
         let zeta_next_batch = FriBatchInfoTarget {
             point: zeta_next,
-            polynomials: [trace_info, constants_info, permutation_zs_info].concat(),
+            polynomials: [trace_info, permutation_zs_info].concat(),
         };
         let batches = vec![zeta_batch, zeta_next_batch];
 

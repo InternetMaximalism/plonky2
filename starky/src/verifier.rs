@@ -66,7 +66,6 @@ pub(crate) fn verify_stark_proof_with_challenges<
         local_values,
         next_values,
         constants,
-        next_constants,
         permutation_zs,
         permutation_zs_next,
         quotient_polys,
@@ -75,7 +74,6 @@ pub(crate) fn verify_stark_proof_with_challenges<
         local_values: &local_values,
         next_values: &next_values,
         constants: &constants,
-        next_constants: &next_constants,
         public_inputs: &public_inputs
             .into_iter()
             .map(F::Extension::from_basefield)
@@ -185,7 +183,6 @@ where
         local_values,
         next_values,
         constants,
-        next_constants,
         permutation_zs,
         permutation_zs_next,
         quotient_polys,
@@ -204,7 +201,6 @@ where
     ensure!(local_values.len() == config.num_columns);
     ensure!(next_values.len() == config.num_columns);
     ensure!(constants.len() == config.num_constants);
-    ensure!(next_constants.len() == config.num_constants);
     ensure!(quotient_polys.len() == stark.num_quotient_polys(config));
 
     if stark.uses_permutation_args() {

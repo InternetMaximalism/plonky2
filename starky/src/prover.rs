@@ -305,7 +305,6 @@ where
                 local_values: &get_trace_values_packed(i_start),
                 next_values: &get_trace_values_packed(i_next_start),
                 constants: &get_constants_packed(i_start),
-                next_constants: &get_constants_packed(i_next_start),
                 public_inputs: &public_inputs,
             };
             let permutation_check_data = permutation_zs_commitment_challenges.as_ref().map(

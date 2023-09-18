@@ -111,7 +111,6 @@ pub struct StarkOpeningSet<F: RichField + Extendable<D>, const D: usize> {
     pub local_values: Vec<F::Extension>,
     pub next_values: Vec<F::Extension>,
     pub constants: Vec<F::Extension>,
-    pub next_constants: Vec<F::Extension>,
     pub permutation_zs: Option<Vec<F::Extension>>,
     pub permutation_zs_next: Option<Vec<F::Extension>>,
     pub quotient_polys: Vec<F::Extension>,
@@ -137,7 +136,6 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             local_values: eval_commitment(zeta, trace_commitment),
             next_values: eval_commitment(zeta_next, trace_commitment),
             constants: eval_commitment(zeta, constants_commitment),
-            next_constants: eval_commitment(zeta_next, constants_commitment),
             permutation_zs: permutation_zs_commitment.map(|c| eval_commitment(zeta, c)),
             permutation_zs_next: permutation_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
             quotient_polys: eval_commitment(zeta, quotient_commitment),
@@ -159,7 +157,6 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             values: self
                 .next_values
                 .iter()
-                .chain(self.next_constants.iter())
                 .chain(self.permutation_zs_next.iter().flatten())
                 .copied()
                 .collect_vec(),
@@ -175,7 +172,6 @@ pub struct StarkOpeningSetTarget<const D: usize> {
     pub local_values: Vec<ExtensionTarget<D>>,
     pub next_values: Vec<ExtensionTarget<D>>,
     pub constants: Vec<ExtensionTarget<D>>,
-    pub next_constants: Vec<ExtensionTarget<D>>,
     pub permutation_zs: Option<Vec<ExtensionTarget<D>>>,
     pub permutation_zs_next: Option<Vec<ExtensionTarget<D>>>,
     pub quotient_polys: Vec<ExtensionTarget<D>>,
@@ -197,7 +193,6 @@ impl<const D: usize> StarkOpeningSetTarget<D> {
             values: self
                 .next_values
                 .iter()
-                .chain(self.next_constants.iter())
                 .chain(self.permutation_zs_next.iter().flatten())
                 .copied()
                 .collect_vec(),

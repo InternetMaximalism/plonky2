@@ -45,7 +45,6 @@ pub fn test_stark_low_degree<F: RichField + Extendable<D>, S: Stark<F, D>, const
                 local_values: &trace_ldes[i],
                 next_values: &trace_ldes[(i + (1 << rate_bits)) % size],
                 constants: &constants_ldes[i],
-                next_constants: &constants_ldes[(i + (1 << rate_bits)) % size],
                 public_inputs: &public_inputs,
             };
 
@@ -90,7 +89,6 @@ pub fn test_stark_circuit_constraints<
         local_values: &F::Extension::rand_vec(config.num_columns),
         next_values: &F::Extension::rand_vec(config.num_columns),
         constants: &F::Extension::rand_vec(config.num_constants),
-        next_constants: &F::Extension::rand_vec(config.num_constants),
         public_inputs: &F::Extension::rand_vec(config.num_public_inputs),
     };
     let alphas = F::rand_vec(1);
@@ -121,8 +119,6 @@ pub fn test_stark_circuit_constraints<
     pw.set_extension_targets(&nexts_t, vars.next_values);
     let constants_t = builder.add_virtual_extension_targets(config.num_constants);
     pw.set_extension_targets(&constants_t, vars.constants);
-    let next_constants_t = builder.add_virtual_extension_targets(config.num_constants);
-    pw.set_extension_targets(&next_constants_t, vars.next_constants);
     let pis_t = builder.add_virtual_extension_targets(config.num_public_inputs);
     pw.set_extension_targets(&pis_t, vars.public_inputs);
     let alphas_t = builder.add_virtual_targets(1);
@@ -138,7 +134,6 @@ pub fn test_stark_circuit_constraints<
         local_values: &locals_t,
         next_values: &nexts_t,
         constants: &constants_t,
-        next_constants: &next_constants_t,
         public_inputs: &pis_t,
     };
     let mut consumer = RecursiveConstraintConsumer::<F, D>::new(

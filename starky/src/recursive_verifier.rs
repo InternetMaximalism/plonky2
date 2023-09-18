@@ -86,7 +86,6 @@ fn verify_stark_proof_with_challenges_circuit<
         local_values,
         next_values,
         constants,
-        next_constants,
         permutation_zs,
         permutation_zs_next,
         quotient_polys,
@@ -95,7 +94,6 @@ fn verify_stark_proof_with_challenges_circuit<
         local_values: &local_values,
         next_values: &next_values,
         constants: &constants,
-        next_constants: &next_constants,
         public_inputs: &public_inputs
             .into_iter()
             .map(|&t| builder.convert_to_ext(t))
@@ -256,7 +254,6 @@ fn add_stark_opening_set_target<F: RichField + Extendable<D>, S: Stark<F, D>, co
         local_values: builder.add_virtual_extension_targets(config.num_columns),
         next_values: builder.add_virtual_extension_targets(config.num_columns),
         constants: builder.add_virtual_extension_targets(config.num_constants),
-        next_constants: builder.add_virtual_extension_targets(config.num_constants),
         permutation_zs: stark
             .uses_permutation_args()
             .then(|| builder.add_virtual_extension_targets(stark.num_permutation_batches(config))),
