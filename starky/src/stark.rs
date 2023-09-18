@@ -9,13 +9,13 @@ use plonky2::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriOracleInfo,
     FriPolynomialInfo,
 };
-use plonky2::hash::hash_types::{HashOut, RichField};
+use plonky2::hash::hash_types::RichField;
 use plonky2::hash::merkle_tree::MerkleCap;
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
-use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher};
+use plonky2::plonk::config::GenericConfig;
+use plonky2::util::ceil_div_usize;
 use plonky2::util::timing::TimingTree;
-use plonky2::util::{ceil_div_usize, log2_strict};
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
