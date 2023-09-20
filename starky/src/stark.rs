@@ -3,14 +3,19 @@ use alloc::vec::Vec;
 
 use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::field::packed::PackedField;
+use plonky2::field::polynomial::PolynomialValues;
+use plonky2::fri::oracle::PolynomialBatch;
 use plonky2::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriOracleInfo,
     FriPolynomialInfo,
 };
 use plonky2::hash::hash_types::RichField;
+use plonky2::hash::merkle_tree::MerkleCap;
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
+use plonky2::plonk::config::GenericConfig;
 use plonky2::util::ceil_div_usize;
+use plonky2::util::timing::TimingTree;
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
@@ -89,6 +94,13 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             blinding: false,
         });
 
+        let fixed_values_info =
+            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_columns);
+        oracles.push(FriOracleInfo {
+            num_polys: config.num_fixed_columns,
+            blinding: false,
+        });
+
         let permutation_zs_info = if self.uses_permutation_args() {
             let num_z_polys = self.num_permutation_batches(config);
             let polys = FriPolynomialInfo::from_range(oracles.len(), 0..num_z_polys);
@@ -112,6 +124,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             point: zeta,
             polynomials: [
                 trace_info.clone(),
+                fixed_values_info.clone(),
                 permutation_zs_info.clone(),
                 quotient_info,
             ]
@@ -142,6 +155,13 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             blinding: false,
         });
 
+        let fixed_values_info =
+            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_columns);
+        oracles.push(FriOracleInfo {
+            num_polys: config.num_fixed_columns,
+            blinding: false,
+        });
+
         let permutation_zs_info = if self.uses_permutation_args() {
             let num_z_polys = self.num_permutation_batches(config);
             let polys = FriPolynomialInfo::from_range(oracles.len(), 0..num_z_polys);
@@ -165,6 +185,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             point: zeta,
             polynomials: [
                 trace_info.clone(),
+                fixed_values_info.clone(),
                 permutation_zs_info.clone(),
                 quotient_info,
             ]
@@ -208,5 +229,25 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             self.num_permutation_instances(config),
             self.permutation_batch_size(),
         )
+    }
+
+    fn fixed_values(&self) -> Vec<PolynomialValues<F>>;
+
+    fn get_fixed_values_commitment<C: GenericConfig<D, F = F>>(
+        &self,
+        config: &StarkConfig,
+    ) -> MerkleCap<F, C::Hasher> {
+        let rate_bits = config.fri_config.rate_bits;
+        let cap_height = config.fri_config.cap_height;
+        let mut timing = TimingTree::default();
+        let fixed_values_commitment = PolynomialBatch::<F, C, D>::from_values(
+            self.fixed_values(),
+            rate_bits,
+            false,
+            cap_height,
+            &mut timing,
+            None,
+        );
+        fixed_values_commitment.merkle_tree.cap
     }
 }
