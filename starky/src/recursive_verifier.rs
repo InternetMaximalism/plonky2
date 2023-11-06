@@ -32,7 +32,7 @@ pub fn verify_stark_proof_circuit<
 >(
     builder: &mut CircuitBuilder<F, D>,
     stark: S,
-    fixed_values_commitment: &MerkleCapTarget,
+    fixed_values_commitment: &Option<MerkleCapTarget>,
     proof_with_pis: &StarkProofWithPublicInputsTarget<D>,
     inner_config: &StarkConfig,
 ) where
@@ -67,7 +67,7 @@ fn verify_stark_proof_with_challenges_circuit<
 >(
     builder: &mut CircuitBuilder<F, D>,
     stark: S,
-    fixed_values_commitment: &MerkleCapTarget,
+    fixed_values_commitment: &Option<MerkleCapTarget>,
     proof_with_pis: &StarkProofWithPublicInputsTarget<D>,
     challenges: StarkProofChallengesTarget<D>,
     inner_config: &StarkConfig,
@@ -101,7 +101,12 @@ fn verify_stark_proof_with_challenges_circuit<
     };
 
     // assert fixed_values commitment
-    builder.connect_merkle_caps(&proof.fixed_values_cap, fixed_values_commitment);
+    if proof.fixed_values_cap.is_some() {
+        builder.connect_merkle_caps(
+            proof.fixed_values_cap.as_ref().unwrap(),
+            fixed_values_commitment.as_ref().unwrap(),
+        );
+    }
 
     let zeta_pow_deg = builder.exp_power_of_2_extension(challenges.stark_zeta, degree_bits);
     let z_h_zeta = builder.sub_extension(zeta_pow_deg, one);
@@ -153,7 +158,7 @@ fn verify_stark_proof_with_challenges_circuit<
     }
 
     let merkle_caps = once(proof.trace_cap.clone())
-        .chain(once(proof.fixed_values_cap.clone()))
+        .chain(proof.fixed_values_cap.clone())
         .chain(proof.permutation_zs_cap.clone())
         .chain(once(proof.quotient_polys_cap.clone()))
         .collect_vec();
@@ -220,8 +225,13 @@ pub fn add_virtual_stark_proof<F: RichField + Extendable<D>, S: Stark<F, D>, con
     let fri_params = config.fri_params(degree_bits);
     let cap_height = fri_params.config.cap_height;
 
+    let num_fixed_columns = if config.num_fixed_columns == 0 {
+        None
+    } else {
+        Some(config.num_fixed_columns)
+    };
     let num_leaves_per_oracle = once(config.num_columns)
-        .chain(once(config.num_fixed_columns))
+        .chain(num_fixed_columns)
         .chain(
             stark
                 .uses_permutation_args()
@@ -233,10 +243,14 @@ pub fn add_virtual_stark_proof<F: RichField + Extendable<D>, S: Stark<F, D>, con
     let permutation_zs_cap = stark
         .uses_permutation_args()
         .then(|| builder.add_virtual_cap(cap_height));
-
+    let fixed_values_cap = if config.num_fixed_columns > 0 {
+        Some(builder.add_virtual_cap(cap_height))
+    } else {
+        None
+    };
     StarkProofTarget {
         trace_cap: builder.add_virtual_cap(cap_height),
-        fixed_values_cap: builder.add_virtual_cap(cap_height),
+        fixed_values_cap,
         permutation_zs_cap,
         quotient_polys_cap: builder.add_virtual_cap(cap_height),
         openings: add_stark_opening_set_target::<F, S, D>(builder, stark, config),
@@ -302,7 +316,12 @@ pub fn set_stark_proof_target<F, C: GenericConfig<D, F = F>, W, const D: usize>(
     W: WitnessWrite<F>,
 {
     witness.set_cap_target(&proof_target.trace_cap, &proof.trace_cap);
-    witness.set_cap_target(&proof_target.fixed_values_cap, &proof.fixed_values_cap);
+    if proof_target.fixed_values_cap.is_some() {
+        witness.set_cap_target(
+            proof_target.fixed_values_cap.as_ref().unwrap(),
+            proof.fixed_values_cap.as_ref().unwrap(),
+        );
+    }
     witness.set_cap_target(&proof_target.quotient_polys_cap, &proof.quotient_polys_cap);
 
     witness.set_fri_openings(
