@@ -58,11 +58,6 @@ where
         fri_params.total_arities() <= degree_bits + rate_bits - cap_height,
         "FRI total reduction arity is too large.",
     );
-    let fixed_values = stark.fixed_values();
-    assert!(
-        fixed_values.len() >= 1,
-        "fixed_values should exist at least one!"
-    );
 
     let trace_commitment = timed!(
         timing,
@@ -83,21 +78,29 @@ where
     let mut challenger = Challenger::new();
     challenger.observe_cap(&trace_cap);
 
+    let fixed_values = stark.fixed_values();
+    assert_eq!(fixed_values.len(), config.num_fixed_columns);
+    
     // commit constraints
-    let fixed_values_commitment = timed!(
-        timing,
-        "compute fixed_values commitment",
-        PolynomialBatch::<F, C, D>::from_values(
-            fixed_values,
-            rate_bits,
-            false,
-            cap_height,
+    let (fixed_values_commitment, fixed_values_cap) = if config.num_fixed_columns > 0 {
+        let fixed_values_commitment = timed!(
             timing,
-            None,
-        )
-    );
-    let fixed_values_cap = fixed_values_commitment.merkle_tree.cap.clone();
-    challenger.observe_cap(&fixed_values_cap);
+            "compute fixed_values commitment",
+            PolynomialBatch::<F, C, D>::from_values(
+                fixed_values,
+                rate_bits,
+                false,
+                cap_height,
+                timing,
+                None,
+            )
+        );
+        let fixed_values_cap = fixed_values_commitment.merkle_tree.cap.clone();
+        challenger.observe_cap(&fixed_values_cap);
+        (Some(fixed_values_commitment), Some(fixed_values_cap))
+    } else {
+        (None, None)
+    };
 
     // Permutation arguments.
     let permutation_zs_commitment_challenges = stark.uses_permutation_args().then(|| {
@@ -186,14 +189,14 @@ where
         zeta,
         g,
         &trace_commitment,
-        &fixed_values_commitment,
+        fixed_values_commitment.as_ref(),
         permutation_zs_commitment,
         &quotient_commitment,
     );
     challenger.observe_openings(&openings.to_fri_openings());
 
     let initial_merkle_trees = once(&trace_commitment)
-        .chain(once(&fixed_values_commitment))
+        .chain(&fixed_values_commitment)
         .chain(permutation_zs_commitment)
         .chain(once(&quotient_commitment))
         .collect_vec();
@@ -229,7 +232,7 @@ where
 fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     stark: &S,
     trace_commitment: &'a PolynomialBatch<F, C, D>,
-    fixed_values_commitment: &'a PolynomialBatch<F, C, D>,
+    fixed_values_commitment: &'a Option<PolynomialBatch<F, C, D>>,
     permutation_zs_commitment_challenges: &'a Option<(
         PolynomialBatch<F, C, D>,
         Vec<PermutationChallengeSet<F>>,
@@ -274,10 +277,16 @@ where
             .unwrap()
     };
     let get_fixed_values_packed = |i_start| -> Vec<P> {
-        fixed_values_commitment
-            .get_lde_values_packed(i_start, step)
-            .try_into()
-            .unwrap()
+        if config.num_fixed_columns > 0 {
+            fixed_values_commitment
+                .as_ref()
+                .unwrap()
+                .get_lde_values_packed(i_start, step)
+                .try_into()
+                .unwrap()
+        } else {
+            vec![]
+        }
     };
 
     // Last element of the subgroup.

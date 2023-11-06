@@ -25,10 +25,6 @@ impl StarkConfig {
         num_public_inputs: usize,
         num_fixed_columns: usize,
     ) -> Self {
-        assert!(
-            num_fixed_columns >= 1,
-            "At least one fixed columns should exist."
-        );
         Self {
             num_columns,
             num_public_inputs,

@@ -26,7 +26,7 @@ pub fn verify_stark_proof<
     const D: usize,
 >(
     stark: S,
-    fixed_values_commitment: &MerkleCap<F, C::Hasher>,
+    fixed_values_commitment: &Option<MerkleCap<F, C::Hasher>>,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     config: &StarkConfig,
 ) -> Result<()> {
@@ -50,7 +50,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     const D: usize,
 >(
     stark: S,
-    fixed_values_commitment: &MerkleCap<F, C::Hasher>,
+    fixed_values_commitment: &Option<MerkleCap<F, C::Hasher>>,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     challenges: StarkProofChallenges<F, D>,
     degree_bits: usize,
@@ -80,10 +80,13 @@ pub(crate) fn verify_stark_proof_with_challenges<
             .collect_vec(),
     };
 
-    assert_eq!(
-        &proof.fixed_values_cap, fixed_values_commitment,
-        "Invalid fixed_values commitment"
-    );
+    if config.num_fixed_columns > 0 {
+        assert_eq!(
+            proof.fixed_values_cap.as_ref().unwrap(),
+            fixed_values_commitment.as_ref().unwrap(),
+            "Invalid fixed_values commitment"
+        );
+    }
 
     let (l_0, l_last) = eval_l_0_and_l_last(degree_bits, challenges.stark_zeta);
     let last = F::primitive_root_of_unity(degree_bits).inverse();
@@ -131,7 +134,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     }
 
     let merkle_caps = once(proof.trace_cap)
-        .chain(once(proof.fixed_values_cap))
+        .chain(proof.fixed_values_cap)
         .chain(proof.permutation_zs_cap)
         .chain(once(proof.quotient_polys_cap))
         .collect_vec();
@@ -195,7 +198,9 @@ where
     let num_zs = stark.num_permutation_batches(config);
 
     ensure!(trace_cap.height() == cap_height);
-    ensure!(fixed_values_cap.height() == cap_height);
+    if fixed_values_cap.is_some() {
+        ensure!(fixed_values_cap.as_ref().unwrap().height() == cap_height);
+    }
     ensure!(quotient_polys_cap.height() == cap_height);
 
     ensure!(local_values.len() == config.num_columns);

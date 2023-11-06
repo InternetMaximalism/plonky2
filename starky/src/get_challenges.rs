@@ -21,7 +21,7 @@ use crate::stark::Stark;
 fn get_challenges<F, C, S, const D: usize>(
     stark: &S,
     trace_cap: &MerkleCap<F, C::Hasher>,
-    fixed_values_cap: &MerkleCap<F, C::Hasher>,
+    fixed_values_cap: &Option<MerkleCap<F, C::Hasher>>,
     permutation_zs_cap: Option<&MerkleCap<F, C::Hasher>>,
     quotient_polys_cap: &MerkleCap<F, C::Hasher>,
     openings: &StarkOpeningSet<F, D>,
@@ -41,8 +41,9 @@ where
     let mut challenger = Challenger::<F, C::Hasher>::new();
 
     challenger.observe_cap(trace_cap);
-    challenger.observe_cap(fixed_values_cap);
-
+    if config.num_fixed_columns > 0 {
+        challenger.observe_cap(&fixed_values_cap.clone().unwrap());
+    }
     let permutation_challenge_sets = permutation_zs_cap.map(|permutation_zs_cap| {
         let tmp = get_n_permutation_challenge_sets(
             &mut challenger,
@@ -140,7 +141,7 @@ pub(crate) fn get_challenges_target<
     builder: &mut CircuitBuilder<F, D>,
     stark: &S,
     trace_cap: &MerkleCapTarget,
-    fixed_values_cap: &MerkleCapTarget,
+    fixed_values_cap: &Option<MerkleCapTarget>,
     permutation_zs_cap: Option<&MerkleCapTarget>,
     quotient_polys_cap: &MerkleCapTarget,
     openings: &StarkOpeningSetTarget<D>,
@@ -157,7 +158,9 @@ where
     let mut challenger = RecursiveChallenger::<F, C::Hasher, D>::new(builder);
 
     challenger.observe_cap(trace_cap);
-    challenger.observe_cap(fixed_values_cap);
+    if config.num_fixed_columns > 0 {
+        challenger.observe_cap(&fixed_values_cap.clone().unwrap());
+    }
 
     let permutation_challenge_sets = permutation_zs_cap.map(|permutation_zs_cap| {
         let tmp = get_n_permutation_challenge_sets_target(

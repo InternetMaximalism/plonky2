@@ -23,7 +23,7 @@ pub struct StarkProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, 
     /// Merkle cap of LDEs of trace values.
     pub trace_cap: MerkleCap<F, C::Hasher>,
     /// Merkle cap of LDEs of fixed_values.
-    pub fixed_values_cap: MerkleCap<F, C::Hasher>,
+    pub fixed_values_cap: Option<MerkleCap<F, C::Hasher>>,
     /// Merkle cap of LDEs of permutation Z values.
     pub permutation_zs_cap: Option<MerkleCap<F, C::Hasher>>,
     /// Merkle cap of LDEs of trace values.
@@ -49,7 +49,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> S
 #[derive(Clone, Debug)]
 pub struct StarkProofTarget<const D: usize> {
     pub trace_cap: MerkleCapTarget,
-    pub fixed_values_cap: MerkleCapTarget,
+    pub fixed_values_cap: Option<MerkleCapTarget>,
     pub permutation_zs_cap: Option<MerkleCapTarget>,
     pub quotient_polys_cap: MerkleCapTarget,
     pub openings: StarkOpeningSetTarget<D>,
@@ -121,7 +121,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
         zeta: F::Extension,
         g: F,
         trace_commitment: &PolynomialBatch<F, C, D>,
-        fixed_values_commitment: &PolynomialBatch<F, C, D>,
+        fixed_values_commitment: Option<&PolynomialBatch<F, C, D>>,
         permutation_zs_commitment: Option<&PolynomialBatch<F, C, D>>,
         quotient_commitment: &PolynomialBatch<F, C, D>,
     ) -> Self {
@@ -132,10 +132,15 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .collect::<Vec<_>>()
         };
         let zeta_next = zeta.scalar_mul(g);
+        let fixed_values = if fixed_values_commitment.is_some() {
+            eval_commitment(zeta, &fixed_values_commitment.unwrap())
+        } else {
+            vec![]
+        };
         Self {
             local_values: eval_commitment(zeta, trace_commitment),
             next_values: eval_commitment(zeta_next, trace_commitment),
-            fixed_values: eval_commitment(zeta, fixed_values_commitment),
+            fixed_values,
             permutation_zs: permutation_zs_commitment.map(|c| eval_commitment(zeta, c)),
             permutation_zs_next: permutation_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
             quotient_polys: eval_commitment(zeta, quotient_commitment),

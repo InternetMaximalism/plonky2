@@ -94,12 +94,15 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             blinding: false,
         });
 
-        let fixed_values_info =
-            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_columns);
-        oracles.push(FriOracleInfo {
-            num_polys: config.num_fixed_columns,
-            blinding: false,
-        });
+        let fixed_values_info = if config.num_fixed_columns > 0 {
+            oracles.push(FriOracleInfo {
+                num_polys: config.num_fixed_columns,
+                blinding: false,
+            });
+            FriPolynomialInfo::from_range(oracles.len() - 1, 0..config.num_fixed_columns)
+        } else {
+            vec![]
+        };
 
         let permutation_zs_info = if self.uses_permutation_args() {
             let num_z_polys = self.num_permutation_batches(config);
@@ -155,12 +158,15 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             blinding: false,
         });
 
-        let fixed_values_info =
-            FriPolynomialInfo::from_range(oracles.len(), 0..config.num_fixed_columns);
-        oracles.push(FriOracleInfo {
-            num_polys: config.num_fixed_columns,
-            blinding: false,
-        });
+        let fixed_values_info = if config.num_fixed_columns > 0 {
+            oracles.push(FriOracleInfo {
+                num_polys: config.num_fixed_columns,
+                blinding: false,
+            });
+            FriPolynomialInfo::from_range(oracles.len() - 1, 0..config.num_fixed_columns)
+        } else {
+            vec![]
+        };
 
         let permutation_zs_info = if self.uses_permutation_args() {
             let num_z_polys = self.num_permutation_batches(config);
@@ -236,18 +242,22 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
     fn get_fixed_values_commitment<C: GenericConfig<D, F = F>>(
         &self,
         config: &StarkConfig,
-    ) -> MerkleCap<F, C::Hasher> {
-        let rate_bits = config.fri_config.rate_bits;
-        let cap_height = config.fri_config.cap_height;
-        let mut timing = TimingTree::default();
-        let fixed_values_commitment = PolynomialBatch::<F, C, D>::from_values(
-            self.fixed_values(),
-            rate_bits,
-            false,
-            cap_height,
-            &mut timing,
-            None,
-        );
-        fixed_values_commitment.merkle_tree.cap
+    ) -> Option<MerkleCap<F, C::Hasher>> {
+        if config.num_fixed_columns == 0 {
+            return None;
+        } else {
+            let rate_bits = config.fri_config.rate_bits;
+            let cap_height = config.fri_config.cap_height;
+            let mut timing = TimingTree::default();
+            let fixed_values_commitment = PolynomialBatch::<F, C, D>::from_values(
+                self.fixed_values(),
+                rate_bits,
+                false,
+                cap_height,
+                &mut timing,
+                None,
+            );
+            Some(fixed_values_commitment.merkle_tree.cap)
+        }
     }
 }

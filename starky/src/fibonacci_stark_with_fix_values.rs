@@ -19,12 +19,12 @@ use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 /// `x0' <- x1, x1' <- x0 + x1, i' <- i+1, j' <- j+1`.
 /// Note: The `i, j` columns are only used to test the permutation argument.
 #[derive(Copy, Clone)]
-struct FibonacciStark<F: RichField + Extendable<D>, const D: usize> {
+struct FibonacciStarkWithFixedValue<F: RichField + Extendable<D>, const D: usize> {
     num_rows: usize,
     _phantom: PhantomData<F>,
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> FibonacciStark<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> FibonacciStarkWithFixedValue<F, D> {
     // The first public input is `x0`.
     const PI_INDEX_X0: usize = 0;
     // The second public input is `x1`.
@@ -57,7 +57,9 @@ impl<F: RichField + Extendable<D>, const D: usize> FibonacciStark<F, D> {
     }
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for FibonacciStark<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
+    for FibonacciStarkWithFixedValue<F, D>
+{
     fn eval_packed_generic<FE, P, const D2: usize>(
         &self,
         vars: StarkEvaluationVars<FE, P>,
@@ -118,7 +120,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for FibonacciStar
     }
 
     fn fixed_values(&self) -> Vec<PolynomialValues<F>> {
-        vec![]
+        let constant_rows = vec![[F::ZERO; 1]; self.num_rows];
+        trace_rows_to_poly_values(constant_rows)
     }
 }
 
@@ -135,7 +138,7 @@ mod tests {
     use plonky2::util::timing::TimingTree;
 
     use crate::config::StarkConfig;
-    use crate::fibonacci_stark::FibonacciStark;
+    use crate::fibonacci_stark_with_fix_values::FibonacciStarkWithFixedValue;
     use crate::proof::StarkProofWithPublicInputs;
     use crate::prover::prove;
     use crate::recursive_verifier::{
@@ -151,16 +154,17 @@ mod tests {
     }
 
     #[test]
-    fn test_fibonacci_stark() -> Result<()> {
+    fn test_fibonacci_stark_with_fixed_value() -> Result<()> {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        type S = FibonacciStark<F, D>;
+        type S = FibonacciStarkWithFixedValue<F, D>;
 
-        let config = StarkConfig::standard_fast_config(4, 3, 0);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
+        let fixed_values_commitment = stark.get_fixed_values_commitment::<C>(&config);
         let trace = stark.generate_trace(public_inputs[0], public_inputs[1]);
         let proof = prove::<F, C, S, D>(
             stark,
@@ -170,7 +174,9 @@ mod tests {
             &mut TimingTree::default(),
         )?;
 
-        verify_stark_proof(stark, &None, proof, &config)
+        verify_stark_proof(stark, &fixed_values_commitment, proof, &config)?;
+
+        Ok(())
     }
 
     #[test]
@@ -178,7 +184,7 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        type S = FibonacciStark<F, D>;
+        type S = FibonacciStarkWithFixedValue<F, D>;
 
         let num_rows = 1 << 5;
         let stark = S::new(num_rows);
@@ -191,7 +197,7 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        type S = FibonacciStark<F, D>;
+        type S = FibonacciStarkWithFixedValue<F, D>;
 
         let num_rows = 1 << 5;
         let stark = S::new(num_rows);
@@ -205,13 +211,13 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        type S = FibonacciStark<F, D>;
+        type S = FibonacciStarkWithFixedValue<F, D>;
 
-        let config = StarkConfig::standard_fast_config(4, 3, 0);
+        let config = StarkConfig::standard_fast_config(4, 3, 1);
         let num_rows = 1 << 5;
         let public_inputs = [F::ZERO, F::ONE, fibonacci(num_rows - 1, F::ZERO, F::ONE)];
         let stark = S::new(num_rows);
-        // let fixed_values_commitment = stark.get_fixed_values_commitment::<C>(&config);
+        let fixed_values_commitment = stark.get_fixed_values_commitment::<C>(&config);
         let trace = stark.generate_trace(public_inputs[0], public_inputs[1]);
         let proof = prove::<F, C, S, D>(
             stark,
@@ -220,11 +226,9 @@ mod tests {
             public_inputs.to_vec(),
             &mut TimingTree::default(),
         )?;
-        verify_stark_proof(stark, &None, proof.clone(), &config)?;
+        verify_stark_proof(stark, &fixed_values_commitment, proof.clone(), &config)?;
 
-        recursive_proof::<F, C, S, C, D>(stark, proof, &config)?;
-
-        Ok(())
+        recursive_proof::<F, C, S, C, D>(stark, proof, &config, true)
     }
 
     fn recursive_proof<
@@ -237,6 +241,7 @@ mod tests {
         stark: S,
         inner_proof: StarkProofWithPublicInputs<F, InnerC, D>,
         inner_config: &StarkConfig,
+        print_gate_counts: bool,
     ) -> Result<()>
     where
         InnerC::Hasher: AlgebraicHasher<F>,
@@ -247,13 +252,22 @@ mod tests {
         let degree_bits = inner_proof.proof.recover_degree_bits(inner_config);
         let pt = add_virtual_stark_proof_with_pis(&mut builder, stark, inner_config, degree_bits);
         set_stark_proof_with_pis_target(&mut pw, &pt, &inner_proof);
+        let fixed_values_commitment = builder.constant_merkle_cap(
+            &stark
+                .get_fixed_values_commitment::<InnerC>(&inner_config)
+                .unwrap(),
+        );
         verify_stark_proof_circuit::<F, InnerC, S, D>(
             &mut builder,
             stark,
-            &None,
+            &Some(fixed_values_commitment),
             &pt,
             inner_config,
         );
+
+        if print_gate_counts {
+            builder.print_gate_counts(0);
+        }
 
         let data = builder.build::<C>();
         let proof = data.prove(pw)?;
